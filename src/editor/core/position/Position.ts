@@ -377,10 +377,7 @@ export class Position {
       zone,
       tablePosition
     } = payload
-    const {
-      scale,
-      table: { tdPadding }
-    } = this.options
+    const { scale } = this.options
     let x = startX
     let y = startY
     let index = startIndex
@@ -534,7 +531,6 @@ export class Position {
           !element.hide &&
           !traceParticle.isTraceHidden(element)
         ) {
-          const tdPaddingWidth = tdPadding[1] + tdPadding[3]
           // 遍历片段范围行与进位合并单元格，按窗口计算位置（跨页按页累积）
           const fragmentTdList = tableFragment
             ? this.draw
@@ -542,6 +538,12 @@ export class Position {
                 .getFragmentTdList(element, tableFragment)
             : element.trList!.flatMap(tr => tr.tdList)
           for (const td of fragmentTdList) {
+            // 需求 8.7：单元格内边距优先取「本单元格」tdPadding（hasChild 单元格即 childTableTdPadding），
+            // 回退到所属表格元素 tdPadding / 全局 table.tdPadding。此前直接用 element.tdPadding 会忽略
+            // 子表容器单元格的独立内边距，导致 childTableTdPadding=[0,0,0,0] 不生效（子表向右溢出/左缩进）。
+            const cellTdPadding =
+              td.tdPadding ?? element.tdPadding ?? this.options.table.tdPadding
+            const tdPaddingWidth = cellTdPadding[1] + cellTdPadding[3]
             let isSplitWindow = false
             let isContinuation = false
             let windowStart = 0
@@ -584,10 +586,10 @@ export class Position {
               startRowIndex,
               startIndex,
               startX:
-                (td.x! + tdPadding[3]) * scale +
+                (td.x! + cellTdPadding[3]) * scale +
                 tablePreX +
                 (element.translateX || 0) * scale,
-              startY: (td.y! + tdPadding[0]) * scale + tablePreY + drawnOffsetY,
+              startY: (td.y! + cellTdPadding[0]) * scale + tablePreY + drawnOffsetY,
               innerWidth: (td.width! - tdPaddingWidth) * scale,
               isTable: true,
               index: index - 1,
@@ -612,6 +614,11 @@ export class Position {
               for (let d = 0; d < tr.tdList.length; d++) {
                 const td = tr.tdList[d]
                 const positionList: IElementPosition[] = []
+                // 需求 8.7：续页表头回显同样用本单元格 tdPadding（含 childTableTdPadding）
+                const repeatTdPadding =
+                  td.tdPadding ?? element.tdPadding ?? this.options.table.tdPadding
+                const repeatTdPaddingWidth =
+                  repeatTdPadding[1] + repeatTdPadding[3]
                 this.computePageRowPosition({
                   positionList,
                   rowList: td.rowList!,
@@ -619,11 +626,11 @@ export class Position {
                   startRowIndex: 0,
                   startIndex: 0,
                   startX:
-                    (td.x! + tdPadding[3]) * scale +
+                    (td.x! + repeatTdPadding[3]) * scale +
                     tablePreX +
                     (element.translateX || 0) * scale,
-                  startY: (repeatAccHeight + tdPadding[0]) * scale + tablePreY,
-                  innerWidth: (td.width! - tdPaddingWidth) * scale,
+                  startY: (repeatAccHeight + repeatTdPadding[0]) * scale + tablePreY,
+                  innerWidth: (td.width! - repeatTdPaddingWidth) * scale,
                   isTable: true,
                   index: index - 1,
                   tdIndex: d,
@@ -659,10 +666,9 @@ export class Position {
     ) {
       return
     }
-    const {
-      scale,
-      table: { tdPadding }
-    } = this.options
+    const { scale } = this.options
+    // 需求 8.6：单元格内边距优先取所属表格元素，回退到全局
+    const tdPadding = td.tdPadding ?? this.options.table.tdPadding
     const tdPaddingHeight = tdPadding[0] + tdPadding[2]
     const rowsHeight = td.rowList!.reduce((pre, cur) => pre + cur.height, 0)
     const blankHeight = (td.height! - tdPaddingHeight) * scale - rowsHeight

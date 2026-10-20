@@ -15,9 +15,28 @@
     "LICENSE",
     "package.json"
   ],
-  "typings": "./dist/src/editor/index.d.ts",
-  "main": "./dist/canvas-editor.umd.cjs",
-  "module": "./dist/canvas-editor.js",
+  "typings": "./lib/types/src/editor/index.d.ts",
+  "main": "./lib/canvas-editor.umd.cjs",
+  "module": "./lib/canvas-editor.js",
+  "exports": {
+    ".": {
+      "types": "./lib/types/src/editor/index.d.ts",
+      "import": "./lib/canvas-editor.js",
+      "require": "./lib/canvas-editor.umd.cjs"
+    },
+    "./vue": {
+      "types": "./dist/src/vue/index.d.ts",
+      "import": "./dist/canvas-editor-vue.js"
+    }
+  },
+  "peerDependencies": {
+    "vue": "^3.5.0"
+  },
+  "peerDependenciesMeta": {
+    "vue": {
+      "optional": true
+    }
+  },
   "homepage": "https://github.com/Hufe921/canvas-editor",
   "repository": {
     "type": "git",
@@ -35,7 +54,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "lib": "eslint . && tsc && vitest run && vite build --mode lib",
+    "dev:vue": "vite --open /vue.html",
+    "lib": "eslint . && tsc && vite build --mode lib && node scripts/copy-lib.mjs",
+    "lib:vue": "eslint . && tsc --noEmit && vite build --mode vue",
     "build": "eslint . && tsc && vitest run && vite build --mode app",
     "serve": "vite preview",
     "lint": "eslint . && tsc --noEmit && vitest run",
@@ -59,6 +80,7 @@
     "@types/prismjs": "^1.26.6",
     "@typescript-eslint/eslint-plugin": "^8.71.1",
     "@typescript-eslint/parser": "^8.71.1",
+    "@vitejs/plugin-vue": "^6.0.10",
     "@vitest/coverage-v8": "^4.1.11",
     "cypress": "^15.21.1",
     "cypress-file-upload": "^5.0.8",
@@ -79,6 +101,7 @@
   "dependencies": {
     "@cspell/dict-en_us": "^4.4.37",
     "cspell-trie-lib": "^10.1.1",
+    "jspdf": "^4.2.1",
     "prismjs": "^1.27.0"
   },
   "simple-git-hooks": {

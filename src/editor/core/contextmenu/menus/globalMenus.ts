@@ -58,7 +58,7 @@ export const globalMenus: IRegisterContextMenu[] = [
     key: PRINT,
     i18nPath: 'contextmenu.global.print',
     icon: 'print',
-    when: () => true,
+    when: payload => !payload.isReadonly && !payload.isFormMode,
     callback: (command: Command) => {
       command.executePrint()
     }

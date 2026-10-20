@@ -93,12 +93,12 @@ describe('表格宽度布局', () => {
   })
 
   it('overflow 为 false 时低于最小列宽的列保持，可压缩列继续分摊', () => {
-    const draw = renderMain([buildTable([1000, 30])], {
+    const draw = renderMain([buildTable([1000, 20])], {
       table: { overflow: false }
     })
     const table = getTable(draw)
-    expect(table.colgroup![1].width).toBe(30)
-    expect(table.colgroup![0].width).toBe(524)
+    expect(table.colgroup![1].width).toBe(20)
+    expect(table.colgroup![0].width).toBe(534)
     expect(table.width!).toBeLessThanOrEqual(INNER_WIDTH)
   })
 
@@ -135,7 +135,7 @@ describe('表格宽度布局', () => {
     draw.getTableOperate().tableAutoFitToContent()
     const table = getTable(draw)
     // 空单元格内容宽度为 0：列宽回退至最小列宽
-    expect(table.colgroup!.map(col => col.width)).toEqual([40, 40])
+    expect(table.colgroup!.map(col => col.width)).toEqual([20, 20])
   })
 
   it('tableAutoFitToContent 在 overflow 为 false 时结果压缩至正文区域内', () => {

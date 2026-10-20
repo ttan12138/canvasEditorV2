@@ -125,7 +125,14 @@ export const TABLE_TD_ZIP_ATTR: Array<keyof ITd> = [
   'borderTypes',
   'slashTypes',
   'disabled',
-  'deletable'
+  'deletable',
+  // 需求 8：联动 / 子表
+  'enableLink',
+  'linkChildIds',
+  'show',
+  'hasChild',
+  'childTables',
+  'name'
 ]
 
 export const TABLE_CONTEXT_ATTR: Array<keyof IElement> = [

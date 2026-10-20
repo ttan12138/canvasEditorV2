@@ -24,6 +24,17 @@ describe('mergeOption', () => {
     expect(options.table.defaultBorderColor).toBeDefined()
   })
 
+  it('需求 8.7：子表容器独立内边距默认值与合并', () => {
+    // 默认独立内边距为 [0,0,0,0]（与常规 tdPadding 解耦，由调用方按需覆盖）
+    const def = mergeOption()
+    expect(def.table.childTableTdPadding).toEqual([0, 0, 0, 0])
+    // 自定义值可覆盖
+    const options = mergeOption({
+      table: { childTableTdPadding: [4, 8, 4, 8] as any }
+    })
+    expect(options.table.childTableTdPadding).toEqual([4, 8, 4, 8])
+  })
+
   it('header disabledPages 合并', () => {
     const options = mergeOption({ header: { disabledPages: [0, 2] } })
     expect(options.header.disabledPages).toEqual([0, 2])

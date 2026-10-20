@@ -1,5 +1,6 @@
 import { IElement } from '../../../..'
 import { EDITOR_PREFIX } from '../../../../dataset/constant/Editor'
+import { EditorMode } from '../../../../dataset/enum/Editor'
 import { TableOrder } from '../../../../dataset/enum/table/TableTool'
 import { DeepRequired } from '../../../../interface/Common'
 import { IEditorOption } from '../../../../interface/Editor'
@@ -93,6 +94,14 @@ export class TableTool {
     const positionContext = this.position.getPositionContext()
     const { isTable } = positionContext
     if (!isTable) return
+    // 表单/只读模式不渲染表格工具（禁止表格结构/删除等编辑操作）
+    if (
+      this.draw.getMode() === EditorMode.FORM ||
+      this.draw.isReadonly()
+    ) {
+      this.dispose()
+      return
+    }
     const elementList = this.draw.getOriginalElementList()
     const positionList = this.position.getOriginalPositionList()
     const element = this.position.getTableElementByContext(
@@ -120,6 +129,11 @@ export class TableTool {
       table: { overflow }
     } = this.options
     const { colgroup, trList } = element
+    // 表格结构不完整（如 hasChild 单元格重建异常）时不渲染，避免读取 undefined.length 崩溃
+    if (!trList || !colgroup) {
+      this.dispose()
+      return
+    }
     const {
       coordinate: { leftTop }
     } = position

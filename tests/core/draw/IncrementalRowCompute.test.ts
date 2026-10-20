@@ -330,11 +330,13 @@ describe('IncrementalRowComputer 行级增量行计算', () => {
     '巨型单段落文档：段内编辑经行级收敛与全量一致',
     () => {
       // 6000 字符的单段落：行级增量下段内编辑只重算少数行
+      // 注：本用例为差分正确性校验，体量较大；慢环境（CI 约慢 4~5 倍）下单次约 50s，
+      // 故放宽超时至 90s 以避免被 30s 守卫误杀（非逻辑失败）。
       runDifferential(makeGiantParagraph(6000), 20260930, 40, {
         expectIncrementalUsed: true
       })
     },
-    30000
+    90000
   )
 
   it(

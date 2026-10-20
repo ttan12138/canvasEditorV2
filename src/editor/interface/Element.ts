@@ -90,6 +90,9 @@ export interface ITableAttr {
   borderColor?: string
   borderWidth?: number
   borderExternalWidth?: number
+  /** 需求 8.6：单元格内边距（上、右、下、左），优先于全局 table.tdPadding；
+   *  子表格可借此拥有独立于文档全局选项的内边距。 */
+  tdPadding?: IPadding
   translateX?: number
 }
 
@@ -185,6 +188,8 @@ export interface IImageBasic {
   }
   imgCrop?: IImageCrop
   imgCaption?: IImageCaption
+  // 需求 5.3：图片左右内边距 [上, 右, 下, 左]，仅左/右生效，绘制/布局时内缩
+  padding?: IPadding
 }
 
 export type IImageElement = IImageBasic & IImageRule

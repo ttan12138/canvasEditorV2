@@ -27,7 +27,11 @@ import {
   ISetControlExtensionOption,
   ISetControlProperties,
   ISetControlRowFlexOption,
-  ISetControlValueOption
+  ISetControlValueOption,
+  IControlPlaceholderValue,
+  IReplaceControlValueOption,
+  IReplaceControlValueItem,
+  IReplaceControlResult
 } from '../../../interface/Control'
 import { IEditorData, IEditorOption } from '../../../interface/Editor'
 import { IElement, IElementPosition } from '../../../interface/Element'
@@ -1521,6 +1525,222 @@ export class Control {
         isSetCursor: false
       })
     }
+  }
+
+  // ============ 需求 3：获取所有带 placeholder 的文本控件值 ============
+  public getControlsValue(): IControlPlaceholderValue[] {
+    const result: IControlPlaceholderValue[] = []
+    const collect = (elementList: IElement[], zone: EditorZone) => {
+      for (let i = 0; i < elementList.length; i++) {
+        const element = elementList[i]
+        if (element.type === ElementType.TABLE) {
+          for (const tr of element.trList!) {
+            for (const td of tr.tdList) {
+              collect(td.value, zone)
+            }
+          }
+          continue
+        }
+        const control = element.control
+        if (!control) continue
+        const { type, placeholder } = control
+        const isTextControl =
+          type === ControlType.TEXT ||
+          type === ControlType.DATE ||
+          type === ControlType.NUMBER
+        if (!isTextControl || !placeholder) continue
+        // 取该控件当前值
+        let value: string | null = null
+        let j = i
+        while (j < elementList.length && elementList[j].controlId === element.controlId) {
+          const e = elementList[j]
+          if (
+            e.controlComponent === ControlComponent.VALUE &&
+            !isElementTraceDeleted(e) &&
+            (type === ControlType.TEXT ||
+              type === ControlType.DATE ||
+              type === ControlType.NUMBER)
+          ) {
+            value = (value ?? '') + e.value
+          }
+          j++
+        }
+        result.push({ name: placeholder, value: value || null, zone, type })
+        i = j - 1
+      }
+    }
+    collect(this.draw.getHeaderElementList(), EditorZone.HEADER)
+    collect(this.draw.getOriginalMainElementList(), EditorZone.MAIN)
+    collect(this.draw.getFooterElementList(), EditorZone.FOOTER)
+    return result
+  }
+
+  // ============ 需求 4/5：按 placeholder 查找并替换控件值 ============
+  /** 解析图片原始宽高比，用于单元格内图片自适应 */
+  private _loadImageSize(src: string): Promise<{ width: number; height: number }> {
+    return new Promise(resolve => {
+      const img = new Image()
+      img.onload = () =>
+        resolve({ width: img.naturalWidth, height: img.naturalHeight })
+      img.onerror = () => resolve({ width: 1, height: 1 })
+      img.src = src
+    })
+  }
+
+  /** 在全部表格中查找 value 等于给定 elementList 的单元格，返回其宽度（含内边距） */
+  private _findCellWidth(elementList: IElement[]): {
+    width: number
+    alone: boolean
+  } | null {
+    let found: { width: number; alone: boolean } | null = null
+    const scan = (list: IElement[]) => {
+      if (found) return
+      for (const el of list) {
+        if (el.type === ElementType.TABLE) {
+          for (const tr of el.trList!) {
+            for (const td of tr.tdList) {
+              if (td.value === elementList) {
+                found = {
+                  width: td.width ?? 0,
+                  alone: td.value.filter(e => e.control).length === 1
+                }
+                return
+              }
+              scan(td.value)
+            }
+          }
+        }
+      }
+    }
+    scan(this.draw.getHeaderElementList())
+    scan(this.draw.getOriginalMainElementList())
+    scan(this.draw.getFooterElementList())
+    return found
+  }
+
+  public async replaceControlValue(
+    payload: IReplaceControlValueOption
+  ): Promise<IReplaceControlResult> {
+    const { name, values = [], value, valueType = 'VALUE', count } = payload
+    const matched: {
+      controlId: string
+      elementList: IElement[]
+    }[] = []
+    const collect = (elementList: IElement[]) => {
+      for (let i = 0; i < elementList.length; i++) {
+        const element = elementList[i]
+        if (element.type === ElementType.TABLE) {
+          for (const tr of element.trList!) {
+            for (const td of tr.tdList) collect(td.value)
+          }
+          continue
+        }
+        const control = element.control
+        if (!control) continue
+        if (control.placeholder === name) {
+          matched.push({ controlId: element.controlId!, elementList })
+          // 跳过同控件其余元素
+          let j = i
+          while (j < elementList.length && elementList[j].controlId === element.controlId)
+            j++
+          i = j - 1
+        }
+      }
+    }
+    collect(this.draw.getHeaderElementList())
+    collect(this.draw.getOriginalMainElementList())
+    collect(this.draw.getFooterElementList())
+
+    let written = 0
+    if (!matched.length) return { matched: 0, written: 0 }
+
+    for (const m of matched) {
+      let valueElements: IElement[]
+      if (valueType === 'IMAGE') {
+        const cell = this._findCellWidth(m.elementList)
+        const isInCell = !!cell && cell.alone && cell.width > 0
+        const cellInnerWidth = isInCell ? cell!.width - 10 : 0 // 默认 tdPadding 左右合计
+        // 收集图片源：value 作为单图；values 中 isImage 的项
+        const images: IReplaceControlValueItem[] = []
+        if (value) images.push({ value })
+        for (const v of values) if (v.isImage) images.push(v)
+        const elements: IElement[] = []
+        for (const img of images) {
+          const src = img.value
+          const { width: natW, height: natH } = await this._loadImageSize(src)
+          const ratio = natH / natW || 1
+          let w: number
+          let h: number
+          const setW = img.width
+          const setH = img.height
+          if (isInCell) {
+            // 需求 5.1
+            if (count && count > 0) {
+              w = Math.floor(cellInnerWidth / count)
+              h = Math.round(w * ratio)
+            } else if (setW && setH) {
+              if (setW > cellInnerWidth) {
+                w = cellInnerWidth
+                h = Math.round(setH * (cellInnerWidth / setW))
+              } else {
+                w = setW
+                h = setH
+              }
+            } else if (setW && !setH) {
+              w = Math.min(setW, cellInnerWidth)
+              h = Math.round(w * ratio)
+            } else if (!setW && setH) {
+              h = setH
+              w = natW ? Math.round(setH / ratio) : cellInnerWidth
+              if (w > cellInnerWidth) {
+                w = cellInnerWidth
+                h = Math.round(w * ratio)
+              }
+            } else {
+              w = cellInnerWidth
+              h = Math.round(w * ratio)
+            }
+          } else {
+            // 需求 5.2：不在单元格内，按给定/原图
+            if (setW && setH) {
+              w = setW
+              h = setH
+            } else if (setW && !setH) {
+              w = setW
+              h = Math.round(setW * ratio)
+            } else if (!setW && setH) {
+              h = setH
+              w = natW ? Math.round(setH / ratio) : natW
+            } else {
+              w = natW
+              h = natH
+            }
+          }
+          elements.push({
+            type: ElementType.IMAGE,
+            value: src,
+            width: Math.max(1, Math.round(w)),
+            height: Math.max(1, Math.round(h)),
+            isWidthAuto: !setW,
+            isScaling: false
+          } as IElement)
+        }
+        valueElements = elements
+      } else {
+        // 需求 4 VALUE 逻辑：value 优先，否则拼接 values 中 VALUE 类型
+        let text = value ?? ''
+        if (!text && values.length) {
+          text = values
+            .filter(v => !v.isImage)
+            .map(v => v.value)
+            .join('')
+        }
+        valueElements = text ? [{ value: text }] : []
+      }
+      this.setValueListById([{ id: m.controlId, value: valueElements }])
+      written++
+    }
+    return { matched: matched.length, written }
   }
 
   public setExtensionListById(payload: ISetControlExtensionOption[]) {

@@ -11,6 +11,7 @@ import { CheckboxControl } from '../../draw/control/checkbox/CheckboxControl'
 import { RadioControl } from '../../draw/control/radio/RadioControl'
 import { CanvasEvent } from '../CanvasEvent'
 import { IElement } from '../../../interface/Element'
+import type { ITd } from '../../../interface/table/Td'
 import { Draw } from '../../draw/Draw'
 
 export function setRangeCache(host: CanvasEvent) {
@@ -127,8 +128,65 @@ export function mousedown(evt: MouseEvent, host: CanvasEvent) {
   }
   const elementList = draw.getElementList()
   const positionList = position.getPositionList()
-  const curIndex = isTable ? tdValueIndex! : index
-  const curElement = elementList[curIndex]
+  let curIndex = isTable ? tdValueIndex! : index
+  let curElement = elementList[curIndex]
+  // 需求 8.4 / 8.4.2：解析「最外层」表格单元格。
+  // 点击子表占位符网格时，getTd() 会落在内层子表 td（无 hasChild），
+  // 需回溯到外层 hasChild 单元格（tablePath[0]）才能正确触发对话框 / 拾取。
+  let targetTd: ITd | null = null
+  if (isTable) {
+    const ctx = position.getPositionContext()
+    const path = ctx.tablePath
+    if (path && path.length) {
+      const first = path[0]
+      const el = draw.getOriginalElementList()[first.index as number]
+      targetTd =
+        el?.trList?.[first.trIndex]?.tdList?.[first.tdIndex] ?? null
+    } else {
+      targetTd = draw.getTd()
+    }
+  }
+  // 需求 8.4：联动「拾取模式」开启时，点击表格单元格仅上报 cellPick，用于可视化设置联动
+  if (draw.getLinkPicking() && isTable && targetTd?.id) {
+    const eventBus = draw.getEventBus()
+    if (eventBus.isSubscribe('cellPick')) {
+      eventBus.emit('cellPick', { tdId: targetTd.id })
+    }
+    return
+  }
+  // 需求 8.4.2：编辑模式下点击「子表占位符」单元格，仅打开配置对话框，不进入编辑
+  if (
+    evt.button === MouseEventButton.LEFT &&
+    isTable &&
+    draw.getMode() === EditorMode.EDIT &&
+    targetTd?.hasChild
+  ) {
+    const eventBus = draw.getEventBus()
+    if (eventBus.isSubscribe('cellPlaceholderClick')) {
+      eventBus.emit('cellPlaceholderClick', { tdId: targetTd.id! })
+    }
+    return
+  }
+  // 需求7.3：单元格仅含一个控件时，点击单元格空白聚焦该控件
+  if (isTable && curElement?.controlComponent !== ControlComponent.VALUE) {
+    const td = draw.getTd()
+    if (td) {
+      const controlIds = new Set<string>()
+      for (const e of td.value) {
+        if (e.controlId) controlIds.add(e.controlId)
+      }
+      if (controlIds.size === 1) {
+        let focusIdx = td.value.findIndex(
+          e => e.controlId && e.controlComponent === ControlComponent.VALUE
+        )
+        if (focusIdx < 0) focusIdx = td.value.findIndex(e => !!e.controlId)
+        if (focusIdx >= 0) {
+          curIndex = focusIdx
+          curElement = elementList[curIndex]
+        }
+      }
+    }
+  }
   // 绘制
   const isDirectHitImage = !!(isDirectHit && isImage)
   const isDirectHitCheckbox = !!(isDirectHit && isCheckbox)

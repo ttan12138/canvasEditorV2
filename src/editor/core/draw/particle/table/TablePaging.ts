@@ -134,10 +134,8 @@ export class TablePaging {
         return tdList
       }
       // 续留行盒最小高度（未缩放，避免产生空盒碎页）
-      const {
-        table: { tdPadding },
-        defaultSize
-      } = this.options
+      const { defaultSize } = this.options
+      const tdPadding = element.tdPadding ?? this.options.table.tdPadding
       const minContinuationHeight = tdPadding[0] + tdPadding[2] + defaultSize
       // 拆分适应度：窗口内可容纳内容行数、续页是否有剩余内容、内容实际消耗高度
       // 注意：窗口、行高、返回值均为未缩放单位（与 td.y/tr.height 一致）
@@ -571,10 +569,8 @@ export class TablePaging {
   // 按可见窗口裁剪单元格内容与内容行（至少保留一个补偿节点，维持单元格非空约定）
   private _trimTdContentToWindow(td: ITd, windowEnd: number): boolean {
     const originalValueLength = td.value.length
-    const {
-      scale,
-      table: { tdPadding }
-    } = this.options
+    const { scale } = this.options
+    const tdPadding = td.tdPadding ?? this.options.table.tdPadding
     let [, endLine] = this.tableParticle.getTdLineRangeBySplitWindow(
       td,
       0,

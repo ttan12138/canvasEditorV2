@@ -560,9 +560,8 @@ export class TableParticle {
     // 行高前缀和（含上内边距）：prefix[k] 为第 k 行底（缩放后）
     let prefix = this.tdLineHeightPrefixCache.get(rowList)
     if (!prefix) {
-      const {
-        table: { tdPadding }
-      } = this.options
+      // 需求 8.6：单元格内边距优先取所属表格元素，回退到全局
+      const tdPadding = td.tdPadding ?? this.options.table.tdPadding
       prefix = [tdPadding[0] * scale]
       for (let i = 0; i < rowList.length; i++) {
         prefix.push(prefix[i] + rowList[i].height)

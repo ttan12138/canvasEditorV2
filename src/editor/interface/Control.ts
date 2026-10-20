@@ -198,6 +198,51 @@ export interface ISetControlExtensionOption {
   extension: unknown
 }
 
+/** 需求 3：返回带 placeholder 的文本控件值 */
+export interface IControlPlaceholderValue {
+  /** 占位符（即 placeholder）作为 name */
+  name: string
+  /** 当前值（无值为 null） */
+  value: string | null
+  /** 所在区 */
+  zone: EditorZone
+  /** 控件类型 */
+  type: ControlType
+}
+
+/** 需求 4/5：按 placeholder 替换控件值的单条数据项 */
+export interface IReplaceControlValueItem {
+  name?: string
+  value: string
+  /** 是否为图片（需求 5） */
+  isImage?: boolean
+  width?: number
+  height?: number
+  canDelete?: boolean
+  canEdit?: boolean
+}
+
+/** 需求 4/5：按 placeholder 替换控件值入参 */
+export interface IReplaceControlValueOption {
+  /** 目标占位符（即 placeholder） */
+  name: string
+  /** 多条数据（需求 4 values） */
+  values?: IReplaceControlValueItem[]
+  /** 直接值（需求 4 value） */
+  value?: string
+  /** 取值逻辑类型，默认 'VALUE' */
+  valueType?: 'IMAGE' | 'VALUE'
+  /** 需求 5.1.1：单元格内图片按单元格宽度 / count 等分 */
+  count?: number
+}
+
+export interface IReplaceControlResult {
+  /** 命中的控件数 */
+  matched: number
+  /** 实际写入的控件数 */
+  written: number
+}
+
 export type ISetControlHighlightOption = IControlHighlight[]
 
 export type ISetControlProperties = {

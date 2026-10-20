@@ -239,12 +239,15 @@ export class ImageParticle {
     y: number
   ) {
     const { scale } = this.options
+    // 需求 5.3：图片左右内边距，绘制时整体右移 padL，内容宽即 element.width
+    const padL = element.padding ? element.padding[3] * scale : 0
+    const drawX = x + padL
     const width = element.width! * scale
     const height = element.height! * scale
     if (this.imageCache.has(element.value)) {
       const img = this.imageCache.get(element.value)!
-      this._drawImageWithCrop(ctx, img, element, x, y, width, height)
-      this._renderCaption(ctx, element, x, y, width, height)
+      this._drawImageWithCrop(ctx, img, element, drawX, y, width, height)
+      this._renderCaption(ctx, element, drawX, y, width, height)
     } else {
       const cacheRenderCount = this.draw.getRenderCount()
       const imageLoadPromise = new Promise((resolve, reject) => {
@@ -264,8 +267,8 @@ export class ImageParticle {
               isSubmitHistory: false
             })
           } else {
-            this._drawImageWithCrop(ctx, img, element, x, y, width, height)
-            this._renderCaption(ctx, element, x, y, width, height)
+            this._drawImageWithCrop(ctx, img, element, drawX, y, width, height)
+            this._renderCaption(ctx, element, drawX, y, width, height)
           }
         }
         img.onerror = error => {
@@ -275,13 +278,13 @@ export class ImageParticle {
               ctx,
               fallbackImage,
               element,
-              x,
+              drawX,
               y,
               width,
               height
             )
             this.imageCache.set(element.value, fallbackImage)
-            this._renderCaption(ctx, element, x, y, width, height)
+            this._renderCaption(ctx, element, drawX, y, width, height)
           }
           reject(error)
         }

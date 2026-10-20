@@ -16,6 +16,6 @@ export const defaultModeRuleOption: Readonly<DeepRequired<IModeRule>> = {
     imagePreviewerDisabled: false
   },
   form: {
-    controlDeletableDisabled: false
+    controlDeletableDisabled: true
   }
 }

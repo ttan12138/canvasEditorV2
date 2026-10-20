@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite'
+import vue from '@vitejs/plugin-vue'
 import typescript from '@rollup/plugin-typescript'
 import cssInjectedByJsPlugin from 'vite-plugin-css-injected-by-js'
 import * as path from 'path'
@@ -38,11 +39,13 @@ export default defineConfig(({ mode }) => {
       ]
     }
   }
+  const plugins = [vue()]
   if (mode === 'lib') {
     return {
       resolve,
       test,
       plugins: [
+        ...plugins,
         cssInjectedByJsPlugin({
           styleId: `${name}-style`,
           topExecutionPriority: true
@@ -50,19 +53,61 @@ export default defineConfig(({ mode }) => {
         {
           ...typescript({
             tsconfig: './tsconfig.json',
-            include: ['./src/editor/**']
+            include: ['./src/editor/**', './src/vue/**'],
+            // 覆盖 tsconfig 的 outDir("dist")，使其落在 lib 目录内（rolldown 路径校验）
+            outDir: 'lib',
+            declaration: true,
+            declarationDir: 'lib/types',
+            rootDir: '/'
+          }),
+          apply: 'build'
+        }
+      ],
+      build: {
+        outDir: 'lib',
+        emptyOutDir: true,
+        lib: {
+          name,
+          fileName: name,
+          entry: path.resolve(__dirname, 'src/index.ts')
+        },
+        rollupOptions: {
+          // Vue 组件层外置 vue，由宿主项目（cvnet 自带 vue 3.3.6）提供
+          external: ['vue']
+        },
+        sourcemap: true
+      }
+    }
+  }
+  if (mode === 'vue') {
+    return {
+      resolve,
+      test,
+      plugins: [
+        ...plugins,
+        cssInjectedByJsPlugin({
+          styleId: `${name}-vue-style`,
+          topExecutionPriority: true
+        }),
+        {
+          ...typescript({
+            tsconfig: './tsconfig.json',
+            include: ['./src/vue/**']
           }),
           apply: 'build',
           declaration: true,
-          declarationDir: 'types/',
+          declarationDir: 'dist/vue/',
           rootDir: '/'
         }
       ],
       build: {
         lib: {
-          name,
-          fileName: name,
-          entry: path.resolve(__dirname, 'src/editor/index.ts')
+          name: `${name}-vue`,
+          fileName: `${name}-vue`,
+          entry: path.resolve(__dirname, 'src/vue/index.ts')
+        },
+        rollupOptions: {
+          external: ['vue']
         },
         sourcemap: true
       }
@@ -71,10 +116,19 @@ export default defineConfig(({ mode }) => {
   return {
     resolve,
     test,
+    plugins,
     base: `/${name}/`,
     server: {
       host: '0.0.0.0',
       port: 3000
+    },
+    build: {
+      rollupOptions: {
+        input: {
+          main: path.resolve(__dirname, 'index.html'),
+          vue: path.resolve(__dirname, 'vue.html')
+        }
+      }
     }
   }
 })

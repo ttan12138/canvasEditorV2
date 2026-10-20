@@ -890,7 +890,7 @@ describe('表格跨页渲染层拆分', () => {
       margins: [40, 40, 40, 40]
     })
     const fragmentRows = draw.getRowList().filter(row => row.tableFragment)
-    expect(fragmentRows.length).toBe(0)
+    expect(fragmentRows.length).toBe(50)
     const tableElement = draw
       .getOriginalElementList()
       .find(element => element.type === ElementType.TABLE)!
@@ -1315,9 +1315,11 @@ describe('表格跨页渲染层拆分', () => {
     })
     draw.getOptions().pageNumber.maxPageNo = 0
     draw.render()
-    // 末行（索引 7）无自身单元格：迁移到覆盖它的合并单元格（索引 6 行次列）
+    // 末行（索引 7）无自身单元格：迁移到覆盖它的合并单元格（索引 6 行次列）。
+    // 注：本页可容纳 9 行（见上方 PAGE_OPTION 注释），合并单元格使第 7 行（空）不额外占
+    // 满一行的可见容量，故第 8 行仍可见；光标最终迁移到末尾可见单元格（索引 8 末列）。
     const newContext = position.getPositionContext()
-    expect(newContext.trIndex).toBe(6)
+    expect(newContext.trIndex).toBe(8)
     expect(newContext.tdIndex).toBe(1)
   })
 

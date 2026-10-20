@@ -670,6 +670,59 @@ elementList.push(
   ]
 )
 
+// 模拟表格（含单元格内控件，用于演示图片单元格自适应 / 均分）
+elementList.push({
+  value: '',
+  type: ElementType.TABLE,
+  width: 600,
+  colgroup: [{ width: 300 }, { width: 300 }],
+  trList: [
+    {
+      height: 40,
+      tdList: [
+        {
+          colspan: 1,
+          rowspan: 1,
+          value: [
+            {
+              type: ElementType.CONTROL,
+              value: '',
+              control: {
+                conceptId: 'cell-sign',
+                type: ControlType.TEXT,
+                prefix: '\u200c',
+                postfix: '\u200c',
+                value: null,
+                placeholder: '单元格签名'
+              }
+            }
+          ]
+        },
+        {
+          colspan: 1,
+          rowspan: 1,
+          value: [{ value: '普通单元格' }]
+        }
+      ]
+    },
+    {
+      height: 40,
+      tdList: [
+        {
+          colspan: 1,
+          rowspan: 1,
+          value: [{ value: '左' }]
+        },
+        {
+          colspan: 1,
+          rowspan: 1,
+          value: [{ value: '右' }]
+        }
+      ]
+    }
+  ]
+})
+
 export const data: IElement[] = elementList
 
 interface IComment {
@@ -704,7 +757,7 @@ export const options: IEditorOption = {
     size: 120
   },
   pageNumber: {
-    format: '第{pageNo}页/共{pageCount}页'
+    // format: '第{pageNo}页/共{pageCount}页'
   },
   placeholder: {
     data: '请输入正文'

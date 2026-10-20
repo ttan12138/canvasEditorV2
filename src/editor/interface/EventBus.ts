@@ -49,4 +49,8 @@ export interface EventBusMap {
   rangeChange: IRangeChange
   renderChange: IRenderChange
   spellcheckClick: ISpellcheckClick
+  /** 需求 8.4.2：编辑模式下点击「子表占位符」单元格时触发，由宿主打开配置对话框 */
+  cellPlaceholderClick: (payload: { tdId: string }) => void
+  /** 需求 8.4：联动「拾取模式」下点击表格单元格时触发，由宿主用于设置联动关系 */
+  cellPick: (payload: { tdId: string }) => void
 }

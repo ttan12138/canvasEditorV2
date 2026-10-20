@@ -79,6 +79,9 @@ export interface IGetImageOption {
   pixelRatio?: number
   mode?: EditorMode
   snapDomFunction?: (iframe: HTMLIFrameElement) => Promise<string>
+  // 页面截图编码格式，默认 image/png。PDF 导出建议用 image/jpeg 以减小体积、提升速度
+  mimeType?: string
+  quality?: number
 }
 
 export interface IComputeRowListPayload {
@@ -90,6 +93,8 @@ export interface IComputeRowListPayload {
   isPagingMode?: boolean
   pageHeight?: number
   surroundElementList?: IElement[]
+  /** 需求 8.4：全局联动子单元格集合（跨嵌套表格），由外层一次性计算后向下透传 */
+  linkTargetIds?: Set<string>
   /**
    * 断点续算：从 state 对应的行首元素（startIndex）重新参与断行，
    * 到与某个旧行状态收敛（converge 返回 true）或文档末尾即止，

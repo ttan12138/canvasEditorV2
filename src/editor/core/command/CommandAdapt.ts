@@ -25,6 +25,12 @@ import {
   PaperDirection
 } from '../../dataset/enum/Editor'
 import { ElementType } from '../../dataset/enum/Element'
+import { buildChildTableElement } from '../draw/particle/table/childTable'
+import type {
+  ITd,
+  ISetCellConfigPayload,
+  ITableCellInfo
+} from '../../interface/table/Td'
 import { ElementStyleKey } from '../../dataset/enum/ElementStyle'
 import { ListStyle, ListType } from '../../dataset/enum/List'
 import { MoveDirection } from '../../dataset/enum/Observer'
@@ -37,9 +43,12 @@ import { DeepRequired } from '../../interface/Common'
 import { IComparePayload } from '../../interface/Compare'
 import {
   IControlValidateResult,
+  IControlPlaceholderValue,
   IGetControlValueOption,
   IGetControlValueResult,
   ILocationControlOption,
+  IReplaceControlResult,
+  IReplaceControlValueOption,
   IRemoveControlOption,
   ISetControlExtensionOption,
   ISetControlHighlightOption,
@@ -131,6 +140,8 @@ import {
 } from '../../utils/element'
 import { mergeOption } from '../../utils/option'
 import { print } from '../../utils/print'
+import { buildPdfDocument, pdfToBase64, pdfToBlob } from '../../utils/pdf'
+import type { jsPDF } from 'jspdf'
 import { compareElementList } from '../../utils/diff'
 import { Control } from '../draw/control/Control'
 import { Draw } from '../draw/Draw'
@@ -188,7 +199,33 @@ export class CommandAdapt {
   }
 
   public mode(payload: EditorMode) {
+    const prev = this.draw.getMode()
     this.draw.setMode(payload)
+    // 模式切换：重建所有 hasChild 单元格的渲染内容（8.4.2/8.4.3）
+    if (prev !== payload) {
+      this._rebuildAllChildTds()
+      this.draw.render()
+    }
+  }
+
+  /** 遍历全部区域表格，重建 hasChild 单元格内容（模式切换时调用） */
+  private _rebuildAllChildTds(): void {
+    const zones: IElement[][] = [
+      this.draw.getHeaderElementList(),
+      this.draw.getOriginalMainElementList(),
+      this.draw.getFooterElementList()
+    ]
+    for (const zone of zones) {
+      for (const el of zone) {
+        if (el.type === ElementType.TABLE && el.trList) {
+          for (const tr of el.trList) {
+            for (const td of tr.tdList) {
+              if (td.hasChild) this._rebuildTdValue(td)
+            }
+          }
+        }
+      }
+    }
   }
 
   public async cut() {
@@ -1501,6 +1538,66 @@ export class CommandAdapt {
     }
   }
 
+  // 生成当前文档的 PDF 文档实例（逐页以 JPEG 编码，体积小、合成快）
+  // preview=true 时使用较低像素比，适合快速预览
+  private async buildPdfDoc(preview = false): Promise<jsPDF> {
+    const { scale, printPixelRatio, paperDirection, width, height } =
+      this.options
+    // 预览走较低像素比，显著缩短渲染与合成耗时
+    const ratio = preview
+      ? Math.min(2, printPixelRatio)
+      : printPixelRatio
+    if (scale !== 1) {
+      this.draw.setPageScale(1)
+    }
+    const base64List = await this.draw.getDataURL({
+      pixelRatio: ratio,
+      mode: EditorMode.PRINT,
+      mimeType: 'image/jpeg',
+      quality: 0.92
+    })
+    const doc = buildPdfDocument(base64List, {
+      width,
+      height,
+      direction: paperDirection,
+      pageDirections: this.draw.getPageDirectionList()
+    })
+    if (scale !== 1) {
+      this.draw.setPageScale(scale)
+    }
+    return doc
+  }
+
+  // 打印预览（调试）：在新标签页打开 PDF，使用 Blob URL 避免大段 base64 卡顿
+  public async printPreview(): Promise<void> {
+    // 先同步打开空白窗口，避免异步生成后触发浏览器弹窗拦截
+    const win = window.open('', '_blank')
+    const doc = await this.buildPdfDoc(true)
+    const blob = pdfToBlob(doc)
+    const url = URL.createObjectURL(blob)
+    if (win) {
+      win.location.href = url
+    } else {
+      window.open(url, '_blank')
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60000)
+  }
+
+  // 生成当前页面 PDF 的 base64 字符串
+  // download=true 时直接下载 PDF 文件；false 时仅返回 base64 字符串
+  public async printPdf(download = false): Promise<string> {
+    const doc = await this.buildPdfDoc(false)
+    if (download) {
+      // 通过 Blob URL 下载，原生极速且不在内存中留存巨型 base64 字符串
+      const blob = pdfToBlob(doc)
+      const url = URL.createObjectURL(blob)
+      downloadFile(url, 'canvas-editor.pdf')
+      setTimeout(() => URL.revokeObjectURL(url), 60000)
+      return ''
+    }
+    return pdfToBase64(doc)
+  }
+
   public replaceImageElement(payload: string) {
     const { startIndex } = this.range.getRange()
     const elementList = this.draw.getElementList()
@@ -2236,6 +2333,138 @@ export class CommandAdapt {
     this.draw.setValue(payload, options)
   }
 
+  /**
+   * 需求 8.5：按单元格 name 更新子表数据。
+   * data 行数 = 【表数据】行数；写入后触发联动重算与重绘。
+   */
+  public setChildTable(payload: { name: string; data: unknown[][] }): void {
+    const { name, data } = payload
+    const mode = this.draw.getMode()
+    // 需求 8.5 / 8.1.3 / 8.4.2：仅表单、只读模式承载并写入子表数据；
+    // 编辑模式 hasChild 单元格仅渲染占位符，不写入数据（编辑模式始终显示占位符）。
+    if (mode !== EditorMode.FORM && mode !== EditorMode.READONLY) return
+    const zones: IElement[][] = [
+      this.draw.getHeaderElementList(),
+      this.draw.getOriginalMainElementList(),
+      this.draw.getFooterElementList()
+    ]
+    let applied = false
+    for (const zone of zones) {
+      const td = this._findTdByName(zone, name)
+      if (td) {
+        this._applyChildTable(td, data)
+        applied = true
+        break
+      }
+    }
+    if (applied) this.draw.render()
+  }
+
+  private _findTdByName(elementList: IElement[], name: string): ITd | null {
+    for (const el of elementList) {
+      if (el.type === ElementType.TABLE && el.trList) {
+        for (const tr of el.trList) {
+          for (const td of tr.tdList) {
+            if (td.name === name) return td
+          }
+        }
+      }
+    }
+    return null
+  }
+
+  private _applyChildTable(td: ITd, data: unknown[][]): void {
+    const structure = td.childTables
+    if (!structure || !structure.header?.length) return
+    td.childData = data
+    td.hasChild = true
+    this._rebuildTdValue(td)
+  }
+
+  /**
+   * 需求 8.4.2 / 8.4.3 / 8.2：按模式重建 hasChild 单元格的渲染内容。
+   * - 非子表单元格：保留原 value，不修改（避免清空文本或产生空数组导致崩溃）
+   * - 编辑模式：由 Draw.computeRowList 直接渲染网格占位符，不改 value
+   * - 表单/只读模式：仅在确有子表结构时构建子表（n*(m+1) 格子）；表数据为空则 show=false
+   */
+  private _rebuildTdValue(td: ITd): void {
+    if (!td.hasChild) return
+    const mode = this.draw.getMode()
+    if (mode === EditorMode.EDIT) return
+    const structure = td.childTables
+    if (structure?.header?.length) {
+      const data = td.childData ?? []
+      td.value = [
+        buildChildTableElement(structure.header, data, {
+          rowHeight: structure.rowHeight
+        })
+      ]
+      // 需求 8.5 / 8.2：表数据非空则显示；为空则隐藏（编辑模式始终显示由 8.1.3 保证，
+      // 此处仅非编辑模式生效）。写入数据后即便此前因空数据被隐藏，也应重新显示。
+      td.show = data.length > 0
+    } else {
+      // 有 hasChild 但无结构：渲染为空白占位（有效单元素，避免空数组崩溃）
+      td.value = [{ value: ZERO }]
+    }
+  }
+
+  /**
+   * 需求 8.4：保存单元格联动/子表配置。
+   */
+  public setCellConfig(payload: ISetCellConfigPayload): void {
+    const zones: IElement[][] = [
+      this.draw.getHeaderElementList(),
+      this.draw.getOriginalMainElementList(),
+      this.draw.getFooterElementList()
+    ]
+    let applied = false
+    for (const zone of zones) {
+      const td = this._findTdById(zone, payload.tdId)
+      if (td) {
+        this._mergeCellConfig(td, payload)
+        // 联动/子表配置变化需重建单元格渲染内容（8.4.2/8.4.3）
+        if (
+          payload.hasChild !== undefined ||
+          payload.childTables !== undefined
+        ) {
+          this._rebuildTdValue(td)
+        }
+        applied = true
+        break
+      }
+    }
+    if (applied) this.draw.render()
+  }
+
+  private _findTdById(elementList: IElement[], tdId: string): ITd | null {
+    for (const el of elementList) {
+      if (el.type === ElementType.TABLE && el.trList) {
+        for (const tr of el.trList) {
+          for (const td of tr.tdList) {
+            if (td.id === tdId) return td
+          }
+        }
+      }
+    }
+    return null
+  }
+
+  private _mergeCellConfig(td: ITd, payload: ISetCellConfigPayload): void {
+    if (payload.enableLink !== undefined) td.enableLink = payload.enableLink
+    if (payload.linkChildIds !== undefined)
+      td.linkChildIds = payload.linkChildIds
+    if (payload.show !== undefined) td.show = payload.show
+    if (payload.hasChild !== undefined) td.hasChild = payload.hasChild
+    if (payload.childTables !== undefined) td.childTables = payload.childTables
+    if (payload.name !== undefined) td.name = payload.name
+    if (payload.verticalAlign !== undefined)
+      td.verticalAlign = payload.verticalAlign
+    if (payload.borderTypes !== undefined) td.borderTypes = payload.borderTypes
+    // 需求 8.7：仅含子表单元格的独立内边距（未设置则回退到全局 childTableTdPadding / tdPadding）
+    if (payload.childTdPadding !== undefined)
+      td.childTdPadding = payload.childTdPadding
+  }
+
   public removeControl(payload?: IRemoveControlOption) {
     if (payload?.id || payload?.conceptId) {
       const { id, conceptId } = payload
@@ -2567,6 +2796,18 @@ export class CommandAdapt {
 
   public setControlValueList(payload: ISetControlValueOption[]) {
     this.draw.getControl().setValueListById(payload)
+  }
+
+  // 需求 3：获取所有带 placeholder 的文本控件值
+  public getControlsValue(): IControlPlaceholderValue[] {
+    return this.draw.getControl().getControlsValue()
+  }
+
+  // 需求 4/5：按 placeholder 查找并替换控件值（含图片单元格自适应）
+  public replaceControlValue(
+    payload: IReplaceControlValueOption
+  ): Promise<IReplaceControlResult> {
+    return this.draw.getControl().replaceControlValue(payload)
   }
 
   public setControlExtension(payload: ISetControlExtensionOption) {
@@ -2904,6 +3145,58 @@ export class CommandAdapt {
       rangeRect,
       tableInfo
     }
+  }
+
+  /** 需求 8.4：获取当前光标所在的单元格上下文（含 tdId/trId/tableId） */
+  public getPositionContext(): IPositionContext {
+    return this.position.getPositionContext()
+  }
+
+  /**
+   * 需求 8.4：列出文档所有单元格及其当前联动/子表配置，
+   * 供右键对话框做「定位当前单元格」与「联动子单元格候选」展示。
+   */
+  public getTableCells(): ITableCellInfo[] {
+    const result: ITableCellInfo[] = []
+    const zones = [
+      this.draw.getHeaderElementList(),
+      this.draw.getOriginalMainElementList(),
+      this.draw.getFooterElementList()
+    ]
+    zones.forEach((elementList, zoneIndex) => {
+      elementList.forEach(el => {
+        if (el.type === ElementType.TABLE && el.trList) {
+          el.trList.forEach((tr, trIndex) => {
+            tr.tdList.forEach((td, tdIndex) => {
+              result.push({
+                tdId: td.id ?? '',
+                name: td.name,
+                label: `表${zoneIndex + 1} R${trIndex + 1}C${tdIndex + 1}`,
+                enableLink: td.enableLink,
+                linkChildIds: td.linkChildIds,
+                show: td.show,
+                hasChild: td.hasChild,
+                childTables: td.childTables,
+                width: td.width,
+                verticalAlign: td.verticalAlign,
+                borderTypes: td.borderTypes,
+                childTdPadding: td.childTdPadding
+              })
+            })
+          })
+        }
+      })
+    })
+    return result
+  }
+
+  /** 需求 8.4：联动「拾取模式」开关——开启后点击表格单元格仅上报 cellPick 事件 */
+  public setLinkPicking(payload: boolean): void {
+    this.draw.setLinkPicking(payload)
+  }
+  /** 需求 8.4：设置当前联动源单元格（拾取模式下橙色高亮） */
+  public setLinkSource(tdId: string | null): void {
+    this.draw.setLinkSource(tdId)
   }
 
   public insertTitle(payload: IElement) {

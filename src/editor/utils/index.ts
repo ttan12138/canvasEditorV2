@@ -56,20 +56,47 @@ export function deepCloneOmitKeys<T, K>(obj: T, omitKeys: (keyof K)[]): T {
 
 export function deepClone<T>(obj: T): T {
   if (typeof structuredClone === 'function') {
-    return structuredClone(obj)
+    try {
+      return structuredClone(obj)
+    } catch {
+      // 存在不可结构化克隆的值（如函数、类实例、Vue 响应式代理等），回退手动克隆
+    }
   }
-  if (!obj || typeof obj !== 'object') {
+  return manualDeepClone(obj)
+}
+
+/**
+ * structuredClone 不可用或失败时的回退克隆。
+ * 仅深拷贝普通对象/数组/Date/Map/Set；其余类实例（如 DOM、函数）保留引用，
+ * 避免抛 DataCloneError，同时保证快照可用。
+ */
+function manualDeepClone<T>(obj: T): T {
+  if (obj === null || typeof obj !== 'object') return obj
+  if (typeof obj === 'function') return obj
+  if (Array.isArray(obj)) {
+    return obj.map(item => manualDeepClone(item)) as T
+  }
+  if (obj instanceof Date) return new Date(obj.getTime()) as unknown as T
+  if (obj instanceof Map) {
+    const m = new Map<unknown, unknown>()
+    obj.forEach((v, k) => m.set(manualDeepClone(k), manualDeepClone(v)))
+    return m as unknown as T
+  }
+  if (obj instanceof Set) {
+    const s = new Set<unknown>()
+    obj.forEach(v => s.add(manualDeepClone(v)))
+    return s as unknown as T
+  }
+  const proto = Object.getPrototypeOf(obj)
+  // 仅深拷贝普通对象（原型为 Object 或 null），其余类实例保留引用
+  if (proto !== Object.prototype && proto !== null) {
     return obj
   }
-  let newObj = {} as T
-  if (Array.isArray(obj)) {
-    newObj = obj.map(item => deepClone(item)) as T
-  } else {
-    ;(Object.keys(obj) as (keyof T)[]).forEach(key => {
-      newObj[key] = deepClone(obj[key])
-    })
+  const result: Record<string, unknown> = {}
+  for (const key of Object.keys(obj)) {
+    result[key] = manualDeepClone((obj as Record<string, unknown>)[key])
   }
-  return newObj
+  return result as T
 }
 
 export function isBody(node: Element): boolean {

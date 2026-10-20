@@ -73,6 +73,8 @@ export class Command {
   public executeSearchNavigateNext: CommandAdapt['searchNavigateNext']
   public executeReplace: CommandAdapt['replace']
   public executePrint: CommandAdapt['print']
+  public executePrintPdf: CommandAdapt['printPdf']
+  public executePrintPreview: CommandAdapt['printPreview']
   public executeReplaceImageElement: CommandAdapt['replaceImageElement']
   public executeSaveAsImageElement: CommandAdapt['saveAsImageElement']
   public executeSetImageCrop: CommandAdapt['setImageCrop']
@@ -158,9 +160,17 @@ export class Command {
   public getGroupRectList: CommandAdapt['getGroupRectList']
   public getControlValue: CommandAdapt['getControlValue']
   public getControlList: CommandAdapt['getControlList']
+  public getControlsValue: CommandAdapt['getControlsValue']
+  public replaceControlValue: CommandAdapt['replaceControlValue']
+  public setChildTable: CommandAdapt['setChildTable']
+  public setCellConfig: CommandAdapt['setCellConfig']
+  public setLinkPicking: CommandAdapt['setLinkPicking']
+  public setLinkSource: CommandAdapt['setLinkSource']
   public getContainer: CommandAdapt['getContainer']
   public getTitleValue: CommandAdapt['getTitleValue']
   public getPositionContextByEvent: CommandAdapt['getPositionContextByEvent']
+  public getPositionContext: CommandAdapt['getPositionContext']
+  public getTableCells: CommandAdapt['getTableCells']
   public getElementById: CommandAdapt['getElementById']
 
   private interceptor?: (name: string, args: unknown[]) => void
@@ -400,6 +410,14 @@ export class Command {
     )
     this.executeReplace = this.wrap('executeReplace', adapt.replace.bind(adapt))
     this.executePrint = this.wrap('executePrint', adapt.print.bind(adapt))
+    this.executePrintPdf = this.wrap(
+      'executePrintPdf',
+      adapt.printPdf.bind(adapt)
+    )
+    this.executePrintPreview = this.wrap(
+      'executePrintPreview',
+      adapt.printPreview.bind(adapt)
+    )
     this.executeReplaceImageElement = this.wrap(
       'executeReplaceImageElement',
       adapt.replaceImageElement.bind(adapt)
@@ -606,6 +624,8 @@ export class Command {
     this.getContainer = adapt.getContainer.bind(adapt)
     this.getTitleValue = adapt.getTitleValue.bind(adapt)
     this.getPositionContextByEvent = adapt.getPositionContextByEvent.bind(adapt)
+    this.getPositionContext = adapt.getPositionContext.bind(adapt)
+    this.getTableCells = adapt.getTableCells.bind(adapt)
     this.getElementById = adapt.getElementById.bind(adapt)
     // 控件
     this.executeSetControlValue = this.wrap(
@@ -646,6 +666,12 @@ export class Command {
     )
     this.getControlValue = adapt.getControlValue.bind(adapt)
     this.getControlList = adapt.getControlList.bind(adapt)
+    this.getControlsValue = adapt.getControlsValue.bind(adapt)
+    this.replaceControlValue = adapt.replaceControlValue.bind(adapt)
+    this.setChildTable = adapt.setChildTable.bind(adapt)
+    this.setCellConfig = adapt.setCellConfig.bind(adapt)
+    this.setLinkPicking = adapt.setLinkPicking.bind(adapt)
+    this.setLinkSource = adapt.setLinkSource.bind(adapt)
     this.executeLocationControl = this.wrap(
       'executeLocationControl',
       adapt.locationControl.bind(adapt)

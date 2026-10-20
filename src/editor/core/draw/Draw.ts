@@ -1,5 +1,31 @@
 import { version } from '../../../../package.json'
 import { ZERO } from '../../dataset/constant/Common'
+import { resolveCellShow } from './particle/table/linkage'
+import { buildChildTableElement } from './particle/table/childTable'
+
+/**
+ * 需求 8.4：收集整篇文档（含嵌套子表）中所有 enableLink 单元格的 linkChildIds，
+ * 汇总为「联动子单元格」集合，用于跨表格高亮可视化。
+ */
+function collectLinkTargetIds(elementList: IElement[]): Set<string> {
+  const targets = new Set<string>()
+  const walk = (list: IElement[]) => {
+    for (const el of list) {
+      if (el.type === ElementType.TABLE && el.trList) {
+        for (const tr of el.trList) {
+          for (const td of tr.tdList) {
+            if (td.enableLink && td.linkChildIds) {
+              for (const cid of td.linkChildIds) targets.add(cid)
+            }
+            if (td.value) walk(td.value)
+          }
+        }
+      }
+    }
+  }
+  walk(elementList)
+  return targets
+}
 import { RowFlex } from '../../dataset/enum/Row'
 import {
   IAppendElementListOption,
@@ -393,6 +419,23 @@ export class Draw {
     return this.mode
   }
 
+  /** 需求 8.4：联动「拾取模式」开关——开启后点击表格单元格仅上报 cellPick 事件 */
+  private linkPicking = false
+  public setLinkPicking(payload: boolean): void {
+    this.linkPicking = payload
+  }
+  public getLinkPicking(): boolean {
+    return this.linkPicking
+  }
+  /** 需求 8.4：当前正在配置联动的源单元格 id（用于拾取模式下橙色高亮） */
+  private linkSourceId: string | null = null
+  public setLinkSource(tdId: string | null): void {
+    this.linkSourceId = tdId
+  }
+  public getLinkSource(): string | null {
+    return this.linkSourceId
+  }
+
   public setMode(payload: EditorMode) {
     if (this.mode === payload) return
     // 设置打印模式
@@ -407,6 +450,10 @@ export class Draw {
     this.range.clearRange()
     this.mode = payload
     this.options.mode = payload
+    // 表单/只读模式立即隐藏表格工具（需求 7.2.1）
+    if (payload === EditorMode.FORM || payload === EditorMode.READONLY) {
+      this.getTableTool().dispose()
+    }
     this.render({
       isSetCursor: false,
       isSubmitHistory: false
@@ -592,9 +639,7 @@ export class Draw {
     if (positionContext.isTable) {
       const elementList = this.getOriginalElementList()
       const td = this.position.getTableTdByContext(elementList, positionContext)
-      const {
-        table: { tdPadding }
-      } = this.options
+      const tdPadding = td!.tdPadding ?? this.options.table.tdPadding
       return td!.width! - tdPadding[1] - tdPadding[3]
     }
     // 分栏布局下按栏宽计算可用宽度（栏宽为缩放值，还原为未缩放单位）
@@ -1315,7 +1360,7 @@ export class Draw {
   }
 
   public async getDataURL(payload: IGetImageOption = {}): Promise<string[]> {
-    const { pixelRatio, mode, snapDomFunction } = payload
+    const { pixelRatio, mode, snapDomFunction, mimeType, quality } = payload
     // 放大像素比
     if (pixelRatio) {
       this.setPagePixelRatio(pixelRatio)
@@ -1337,7 +1382,21 @@ export class Draw {
     if (snapDomFunction) {
       await this.blockParticle.drawIframeToPage(this.pageList, snapDomFunction)
     }
-    const dataUrlList = this.pageList.map(c => c.toDataURL())
+    const dataUrlList = this.pageList.map(c => {
+      const mime = mimeType || 'image/png'
+      if (mime === 'image/jpeg') {
+        // JPEG 不支持透明通道，先铺白底再绘制，避免透明区域变黑
+        const tmp = document.createElement('canvas')
+        tmp.width = c.width
+        tmp.height = c.height
+        const tctx = tmp.getContext('2d')!
+        tctx.fillStyle = '#ffffff'
+        tctx.fillRect(0, 0, tmp.width, tmp.height)
+        tctx.drawImage(c, 0, 0)
+        return tmp.toDataURL('image/jpeg', quality ?? 0.92)
+      }
+      return c.toDataURL()
+    })
     // 还原
     if (pixelRatio) {
       this.setPagePixelRatio(null)
@@ -1748,11 +1807,14 @@ export class Draw {
       pageHeight = 0,
       surroundElementList = []
     } = payload
+    // 需求 8.4：全局联动子单元格集合（仅根调用计算一次，递归向下透传）
+    const linkTargetIds =
+      payload.linkTargetIds ?? collectLinkTargetIds(elementList)
     const {
       defaultSize,
       scale,
       imgCaption,
-      table: { tdPadding, defaultColMinWidth, overflow },
+      table: { defaultColMinWidth, overflow },
       defaultTabWidth
     } = this.options
     const defaultBasicRowMarginHeight = this.getDefaultBasicRowMarginHeight()
@@ -1926,17 +1988,22 @@ export class Draw {
         } else {
           const elementWidth = element.width! * scale
           const elementHeight = element.height! * scale
+          // 需求 5.3：图片左右内边距，布局预留 padL+padR，绘制时内缩
+          const padL = element.padding ? element.padding[3] * scale : 0
+          const padR = element.padding ? element.padding[1] * scale : 0
+          const padLR = padL + padR
+          const slotWidth = elementWidth + padLR
           // 图片超出尺寸后自适应（图片大小大于可用宽度时）
-          if (elementWidth > availableWidth) {
-            const adaptiveHeight =
-              (elementHeight * availableWidth) / elementWidth
-            element.width = availableWidth / scale
+          if (slotWidth > availableWidth) {
+            const availContent = Math.max(0, availableWidth - padLR)
+            const adaptiveHeight = (elementHeight * availContent) / elementWidth
+            element.width = availContent / scale
             element.height = adaptiveHeight / scale
-            metrics.width = availableWidth
+            metrics.width = availContent + padLR
             metrics.height = adaptiveHeight
             metrics.boundingBoxDescent = adaptiveHeight
           } else {
-            metrics.width = elementWidth
+            metrics.width = slotWidth
             metrics.height = elementHeight
             metrics.boundingBoxDescent = elementHeight
           }
@@ -1949,10 +2016,30 @@ export class Draw {
           }
         }
       } else if (element.type === ElementType.TABLE) {
-        const tdPaddingWidth = tdPadding[1] + tdPadding[3]
-        const tdPaddingHeight = tdPadding[0] + tdPadding[2]
+        // 需求 8.6：单元格内边距优先取表格元素自身 tdPadding，回退到全局 table.tdPadding
+        const baseTdPadding = element.tdPadding ?? this.options.table.tdPadding
+        // 需求 8.7：仅含子表的单元格使用独立内边距（childTableTdPadding），与常规 tdPadding 解耦
+        const childTdPadding =
+          this.options.table.childTableTdPadding ?? baseTdPadding
+        const tdPaddingHeight = baseTdPadding[0] + baseTdPadding[2]
         // 表格跨页在渲染层拆分行（数据层保持单一表格）
         const trList = element.trList!
+        // 需求 8.3：联动驱动的单元格显隐（仅非编辑模式生效；编辑模式始终显示）
+        const isEditMode = this.getMode() === EditorMode.EDIT
+        const hasLinkage = element.trList!.some(tr =>
+          tr.tdList.some(
+            td =>
+              td.enableLink ||
+              td.linkChildIds?.length ||
+              td.show !== undefined ||
+              td.hasChild
+          )
+        )
+        let showMap: Map<string, boolean> | null = null
+        // 需求 8.3：非编辑模式下计算本表联动显隐（编辑模式始终显示）
+        if (hasLinkage && !isEditMode) {
+          showMap = resolveCellShow(element)
+        }
         // 重置tr高度：行高不可低于一个单元格最小高度
         const tdMinHeight =
           tdPaddingHeight + defaultSize + (rowMargin * 2) / scale
@@ -1974,20 +2061,112 @@ export class Draw {
         // 计算表格行列
         this.tableParticle.computeRowColInfo(element)
         // 计算表格内元素信息
+        const hiddenMap = new Map<string, boolean>()
         for (let t = 0; t < trList.length; t++) {
           const tr = trList[t]
           for (let d = 0; d < tr.tdList.length; d++) {
             const td = tr.tdList[d]
+            // 需求 8.7：含子表的单元格使用独立内边距（childTdPadding 优先于全局
+            // childTableTdPadding，再回退常规 tdPadding），实现「仅子表单元格」单独配置
+            const cellPadding = td.hasChild
+              ? (td.childTdPadding ?? childTdPadding)
+              : baseTdPadding
+            const cellPaddingWidth = cellPadding[1] + cellPadding[3]
+            const cellPaddingHeight = cellPadding[0] + cellPadding[2]
+            // 需求 8.6：把本表决议后的内边距写入单元格，供后续定位/绘制按单元格读取
+            td.tdPadding = cellPadding
+            // 需求 8.3（非编辑模式联动显隐）与 8.2（表单模式空子表不显示）
+            const hidden =
+              (showMap ? showMap.get(td.id!) === false : false) ||
+              (td.hasChild === true &&
+                !isEditMode &&
+                (!td.childData || td.childData.length === 0))
+            hiddenMap.set(td.id!, hidden)
+            // 需求 8.4.2/8.4.3：hasChild 单元格渲染「等效结果单元格」网格
+            // （编辑模式作为预览，表单模式展示真实数据；点击均打开配置对话框）
+            let elementList: IElement[]
+            if (td.hasChild) {
+              const structure = td.childTables
+              if (hidden) {
+                // 需求 8.3.2 / 8.2：联动隐藏或空子表时不渲染子表头，留空占位
+                elementList = [{ value: ZERO }]
+              } else if (structure?.header?.length) {
+                // 需求 8.4.2 / 8.1.3：编辑模式仅渲染「占位符/预览」（不承载实际数据），
+                // 仅表头网格，无数据行；表单、只读模式才展示真实数据。
+                const renderData = isEditMode ? [] : (td.childData ?? [])
+                elementList = [
+                  buildChildTableElement(structure.header, renderData, {
+                    rowHeight: structure.rowHeight,
+                    // 8.4.1.4.1：子表格宽度不超过所在单元格内容宽（已扣除容器与子表自身内边距）
+                    maxWidth: td.width
+                      ? td.width - cellPaddingWidth
+                      : undefined,
+                    // 需求 8.7：子表自身单元格的内边距用全局 tdPadding（与常规单元格一致），
+                    // 而非父级 childTableTdPadding（那是「拥有子表的父单元格」的内边距）。
+                    // 父单元格的内边距已通过 maxWidth = td.width - cellPaddingWidth 扣除。
+                    tdPadding: baseTdPadding
+                  })
+                ]
+              } else {
+                elementList = [
+                  {
+                    value: `子表：${td.name || td.id}（右键配置）`,
+                    color: '#8a8a8a',
+                    italic: true
+                  } as IElement
+                ]
+              }
+              // 关键：把本帧渲染用的网格写回 td.value，使 drawRow 的 elementList
+              // 与 td.rowList 一致，避免索引越界（drawRow 以 td.value 为绘制源）
+              td.value = elementList
+            } else {
+              // 防御：td.value 可能为空/undefined（如刚由命令清空），避免空数组进入 computeListStyle 崩溃
+              elementList =
+                hidden || !td.value || td.value.length === 0
+                  ? [{ value: ZERO }]
+                  : td.value
+            }
+            // 需求 8.4（可视化）：高亮仅在「拾取模式」生效，关闭弹窗即恢复
+            // - 橙色：当前正在配置的联动源单元格（linkSourceId）
+            // - 蓝色：已被关联为联动子单元格的目标单元格（linkTargetIds）
+            // 每次渲染都会执行本块，非拾取时把遗留的高亮色清除回原背景。
+            if (td.id) {
+              const isSource = this.linkPicking && this.linkSourceId === td.id
+              const isTarget = this.linkPicking && linkTargetIds.has(td.id)
+              if (isSource) {
+                td.backgroundColor = '#ffd9a0'
+              } else if (isTarget) {
+                td.backgroundColor = '#9ec5ff'
+              } else if (
+                td.backgroundColor === '#ffd9a0' ||
+                td.backgroundColor === '#9ec5ff'
+              ) {
+                td.backgroundColor = undefined
+              }
+            }
             const rowList = this.computeRowList({
-              innerWidth: (td.width! - tdPaddingWidth) * scale,
-              elementList: td.value,
+              innerWidth: (td.width! - cellPaddingWidth) * scale,
+              elementList,
               isFromTable: true,
-              isPagingMode
+              isPagingMode,
+              linkTargetIds
             })
             const rowHeight = rowList.reduce((pre, cur) => pre + cur.height, 0)
             td.rowList = rowList
             // 移除缩放导致的行高变化-渲染时会进行缩放调整
-            const curTdHeight = rowHeight / scale + tdPaddingHeight
+            let curTdHeight = rowHeight / scale + cellPaddingHeight
+            // 需求 8.4/8.2：子表单元格应紧贴子表格内容，单元格高度 = 子表格高度
+            // （表头 + n 行数据），去除行内 rowMargin 与单元格上下内边距造成的底部空白条。
+            // 注意：表格为块元素，行首会强制换行，导致 rowList[0] 往往是空种子行，
+            // 真正的子表格位于其后某行，故需在 rowList 中定位 table 元素而非固定取 [0]。
+            if (td.hasChild && !hidden) {
+              const tableRow = rowList.find(
+                row => row.elementList[0]?.type === ElementType.TABLE
+              )
+              if (tableRow) {
+                curTdHeight = tableRow.elementList[0].metrics.height / scale
+              }
+            }
             // 内容高度大于当前单元格高度需增加
             if (td.height! < curTdHeight) {
               const extraHeight = curTdHeight - td.height!
@@ -2043,6 +2222,20 @@ export class Draw {
               changeTd.height! -= reduceHeight
               changeTd.realHeight! -= reduceHeight
             })
+          }
+        }
+        // 需求 8.3.2：整行单元格（联动隐藏或空子表）均隐藏时，折叠该行（不渲染该行内容）
+        if (hiddenMap.size) {
+          for (const tr of trList) {
+            const allHidden = tr.tdList.every(td => hiddenMap.get(td.id!))
+            if (allHidden) {
+              tr.height = 0
+              tr.tdList.forEach(td => {
+                td.height = 0
+                td.realHeight = 0
+                td.mainHeight = 0
+              })
+            }
           }
         }
         // 需要重新计算表格内值
@@ -2703,13 +2896,7 @@ export class Draw {
     // 优先绘制高亮元素
     this._drawHighlight(ctx, payload)
     // 绘制元素、下划线、删除线、选区
-    const {
-      scale,
-      table: { tdPadding },
-      group,
-      lineBreak,
-      whiteSpace
-    } = this.options
+    const { scale, group, lineBreak, whiteSpace } = this.options
     const {
       rowList,
       pageNo,
@@ -2760,6 +2947,12 @@ export class Draw {
           !this.isDesignMode()
         ) {
           // 控件隐藏时不绘制
+          this.textParticle.complete()
+        } else if (
+          // 需求 9：只读模式空控件不显示占位符，仅保留空白
+          element.controlComponent === ControlComponent.PLACEHOLDER &&
+          this.getMode() === EditorMode.READONLY
+        ) {
           this.textParticle.complete()
         } else if (element.type === ElementType.IMAGE) {
           this.textParticle.complete()
@@ -3040,7 +3233,6 @@ export class Draw {
           !element.hide &&
           !this.traceParticle.isTraceHidden(element)
         ) {
-          const tdPaddingWidth = tdPadding[1] + tdPadding[3]
           const fragment = curRow.tableFragment
           // 续页回显表头内容（使用一次性位置列表，不绘制选区）
           if (curRow.repeatTdPositionList?.length) {
@@ -3048,6 +3240,13 @@ export class Draw {
               td,
               positionList: repeatPositionList
             } of curRow.repeatTdPositionList) {
+              const tdPaddingWidth =
+                (td.tdPadding ??
+                  element.tdPadding ??
+                  this.options.table.tdPadding)[1] +
+                (td.tdPadding ??
+                  element.tdPadding ??
+                  this.options.table.tdPadding)[3]
               this.drawRow(ctx, {
                 elementList: td.value,
                 positionList: repeatPositionList,
@@ -3066,6 +3265,13 @@ export class Draw {
             ? this.tableParticle.getFragmentTdList(element, fragment)
             : element.trList!.flatMap(tr => tr.tdList)
           for (const td of fragmentTdList) {
+            const tdPaddingWidth =
+              (td.tdPadding ??
+                element.tdPadding ??
+                this.options.table.tdPadding)[1] +
+              (td.tdPadding ??
+                element.tdPadding ??
+                this.options.table.tdPadding)[3]
             let rowList = td.rowList!
             let startIndex = 0
             if (fragment) {

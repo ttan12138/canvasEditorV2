@@ -1,0 +1,150 @@
+1. 当前实现内容可以作为编辑模式，
+此外我还需要两种模式：表单模式、只读模式
+这两种模式均不需要 <EditorToolbar />
+在demo实现一个切换模式的方法
+
+2. 插入占位符使用 main.ts line749-line789
+new Dialog({
+          title: '文本控件',
+          data: [
+            {
+              type: 'text',
+              label: '占位符',
+              name: 'placeholder',
+              required: true,
+              placeholder: '请输入占位符'
+            },
+            {
+              type: 'text',
+              label: '默认值',
+              name: 'value',
+              placeholder: '请输入默认值'
+            }
+          ],
+          onConfirm: payload => {
+            const placeholder = payload.find(
+              p => p.name === 'placeholder'
+            )?.value
+            if (!placeholder) return
+            const value = payload.find(p => p.name === 'value')?.value || ''
+            instance.command.executeInsertControl({
+              type: ElementType.CONTROL,
+              value: '',
+              control: {
+                type,
+                value: value
+                  ? [
+                      {
+                        value
+                      }
+                    ]
+                  : null,
+                placeholder
+              }
+            })
+          }
+        })
+        break
+
+
+
+3.请实现一个函数：获取所有带有placeholder的文本控件的值的array
+每个item:{name：placeholder， value：当前value}
+
+4. 请实现一个根据placeholder查找控件，替换对应控件value的函数，
+参数：{
+  name: 【placeholder】,
+  values: [],// 数组 每一项{name: 【placeholder】, value: value1,valueType?: string, width?: number, height?: number, canDelete?: boolean, canEdit?: boolean,padding:[number, number]}
+  value: "", // 字符串
+  // 取值逻辑
+  // 如果是valueType = "VALUE",或者valueType = undefined时， 有value，则取value,有values，则取values中所有valueType = "VALUE"的项目的value拼接
+  // 如果是valueType="IMAGE"，有value，则取value,有values，则取values中所有valueType="IMAGE"的项目
+
+  valueType: "IMAGE",// "VALUE"
+  count?: number,
+}
+
+
+5. 上述替换文字参数时直接替换即可；
+5.1 如果valueType="IMAGE"时，如果目标控件在单元格内，且单元格只有该一个控件时,
+5.1.1 如果有count属性，count代表的意思是一行几张图，则需要使用【单元格宽度/count】作为图片的宽度, 高度自适应；
+5.1.2 如果没有count属性，如果设置了width和height，判断如果图片的宽超过单元格，则最大宽为单元格的宽，高度为保持设置的width和height比例，但是宽度为单元格宽后的高度；如果没有超过单元格的宽，则直接设置width和height；
+5.1.3 如果没有count属性，如果设置了width，没有设置height，宽度使用设置的width（如果图片的宽超过单元格，则最大宽为单元格的宽），高度为保持原图比例的自适应；
+5.1.3 如果没有count属性，如果设置了height，没有设置width，高度使用设置的高，此时宽保持原图比例的自适应，如果此时图片的宽超过单元格，则最大宽为单元格的宽；
+5.1.4 如果没有count属性，如果没有设置width和height，宽度使用单元格的宽，高度为保持原图比例的自适应；
+5.2 如果valueType="IMAGE"时，如果目标控件不在单元格内
+5.2.1 如果设置了width和height，使用宽高；
+5.2.2 如果设置了width，没设置height，使用width设置，并保持原图比例自适应高；
+5.2.3 如果设置了height，没设置width，使用height设置，并保持原图比例自适应宽；
+5.2.4 如果没有设置height和width，使用原图宽高；
+5.3 每一张图还支持padding:[左，右] 默认为[0,0], 如果设置了值 请再宽高基础上设置padding,
+即如果设置了上述的count:2,values[{padding:[10,20]}，{padding:[20,20]}]
+此时应该第一张图的宽度应该是（50% - 30px），高重新自适应
+第二张图的宽度应该是（50% - 40px），高重新自适应
+10px 图一的宽 20px  20px 图二的宽 20px
+
+
+
+
+6. 插入占位符功能应该支持设置前缀、后缀，前缀后缀的默认值使用'\u200c'，空白符号
+7. 表单模式
+7.1 不能以任何形式删除控件
+7.1.1 如聚焦到控件后面进而删除控件
+7.1.2 如聚焦到空白内容的控件，之后的backspace删除控件
+7.2 不能对表格的结构操作，也不能删除表格
+7.2.1 如不显示表格外围的增加行列，调整宽高的按钮
+7.2.2 如不显示右键菜单的表格边框、垂直对齐、插入行列、删除行列、合并单元格、取消合并、根据内容自动调整表格、根据窗口自动调整表格
+7.3 如果单元格只有一个控件，点击单元格的空白应该能聚焦到该控件
+
+
+8. 表格的单元格
+8.1 增加5个属性 支持子表格和联动的特殊规则
+8.1.1 enableLink:是否开启联动；
+8.1.2 linkChildIds: 联动的子单元格Id集合；
+8.1.3 show: 是否显示，编辑模式始终为true；
+8.1.4 hasChild: 是否有子表结构；
+8.1.5 childTables: 用于记录， 根据下述规则构建合理的子表的结构
+
+8.2 表格的单元格支持子表格属性
+子表格支持一个表头以及很多行的对应的表数据；在该单元格显示，但是子表格不要外边框，内边框可以有；
+如果表单模式，表数据为空时，该单元格应该show=false
+
+8.3 联动属性影响的渲染
+8.3.1 enableLink=ture时，如果存在linkChildIds,根据ids查找子单元格的show，如果都show=false，则不展示;如果ids为空，也正常展示；
+8.3.2 enableLink=ture时， 如果当前单元格的show=false,且自己独占一行，则不渲染该行，继续渲染后面的内容
+8.3.3 enableLink=false时， 始终渲染单元格
+8.4 设置联动及子表格功能：
+  8.4.1 仅编辑模式下 右键一个单元格时，弹出dialog
+  8.4.1.1 设置当前单元格的enableLink
+  8.4.1.2 enableLink=true时，可视化一个当前已有的全部单元格供选择作为子单元格的功能（选择结果作为linkChildIds），注意校验选中的子表格的关联链路上不能有当前单元格
+  8.4.1.3 设置当前单元格的hasChild
+  8.4.1.4 hasChild=true时，可视化一个基于当前单元格的宽度，可视化一个表头，可视化一个【表数据】，
+  8.4.1.4.1 表头支持调整宽度作为整个子表格的宽度，但注意不超过子表格的宽度
+  8.4.1.4.2 表头支持调整高度，需要记录用于后续表单模式渲染
+  8.4.1.4.3 【表数据】支持设置高度，需要记录用于后续表单模式渲染
+  8.4.1.4.4 【表数据】支持设置每个格使用的数据的key，需要记录用于后续表单模式渲染
+  8.4.1.5 有子表格的单元格可以设置name属性
+  8.4.2 hasChild=true的这种单元格在编辑模式渲染为一个占位符，并且这种单元格聚焦时，只能打开上述dialog进行编辑；
+  8.4.3 hasChild=true的单元格在表单模式渲染为n*(m+1)的格子，n代表【表头】列数，m代表【表数据】的数目；表单模式不能编辑该单元格；
+8.5 提供一个新的函数 替换子表格的数据 setChildTable({
+  name: string,
+  data: any[][]
+})
+用于更新子表格的数据，data的长度代表【表数据】的数目；
+更新数据之后，查看联动的依赖关系，更新表格的渲染
+8.6 如果目标单元格因为数据为空隐藏了的话，写入数据也应该显示出来
+8.7 从表单模式和只读模式 写入数据之后，再回到编辑模式，编辑模式不应显示写入的数据
+
+
+
+
+9. 只读模式 文本控件无内容时 不要显示占位符，显示空白
+  table的子表格无数据时渲染同表单模式
+
+10. 替换占位符和表格数据的时候，需要在页眉、页脚、内容区域 都替换
+
+
+
+
+
+
