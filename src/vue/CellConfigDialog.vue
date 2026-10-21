@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import type Editor from '../editor'
 import { EditorMode, RowFlex, VerticalAlign, TdBorder } from '../editor'
 import type { IPositionContext } from '../editor/interface/Position'
 import type { ITableCellInfo, ISetCellConfigPayload } from './control'
 import { defaultTableOption } from '../editor/dataset/constant/Table'
-import { useEditorContext } from './context'
+import { useEditorContext, type ICellConfigApi } from './context'
 
 const ctx = useEditorContext()
 const getInstance = () => ctx.getInstance()
@@ -435,6 +435,18 @@ const openByName = (name: string) => {
 }
 
 defineExpose({ open, openByName })
+
+// 将 openByName 注册到 EditorContext，供调试面板（<EditorDebug>）在 <CanvasEditor>
+// 内部跨 slot 调用（对话框与调试面板为兄弟节点，无法直接 provide/inject 到彼此）
+onMounted(() => {
+  const api: ICellConfigApi = { openByName }
+  ctx.cellConfig.value = api
+})
+onUnmounted(() => {
+  if (ctx.cellConfig.value?.openByName === openByName) {
+    ctx.cellConfig.value = null
+  }
+})
 </script>
 
 <template>

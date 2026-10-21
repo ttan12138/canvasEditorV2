@@ -41,6 +41,10 @@ export interface IElementStyle {
   strikeout?: boolean
   rowFlex?: RowFlex
   rowMargin?: number
+  /** 表格作为块元素时，与后续内容之间的垂直间距（px，未缩放）。
+   *  优先级高于全局 options.table.blockMargin，用于单独调整某个表格的底部间距；
+   *  不设置时回退到全局配置，默认沿用行距 rowMargin。 */
+  blockMargin?: number
   spacingBefore?: number
   spacingAfter?: number
   level?: TitleLevel

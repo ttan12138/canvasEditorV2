@@ -253,7 +253,7 @@ export function mergeOption(
     resizerSize: 5,
     marginIndicatorSize: 35,
     marginIndicatorColor: '#BABABA',
-    margins: [100, 120, 100, 120],
+    margins: [50, 60, 50, 60],
     pageMode: PageMode.PAGING,
     renderMode: RenderMode.SPEED,
     defaultHyperlinkColor: '#0000FF',

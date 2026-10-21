@@ -7,5 +7,6 @@ export const defaultTableOption: Readonly<Required<ITableOption>> = {
   defaultTrMinHeight: 20,
   defaultColMinWidth: 20,
   defaultBorderColor: '#000000',
-  overflow: false
+  overflow: false,
+  blockMargin: 0
 }

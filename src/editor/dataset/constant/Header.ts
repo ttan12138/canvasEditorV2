@@ -2,7 +2,7 @@ import { IHeader } from '../../interface/Header'
 import { MaxHeightRatio } from '../enum/Common'
 
 export const defaultHeaderOption: Readonly<Required<IHeader>> = {
-  top: 30,
+  top: 15,
   inactiveAlpha: 1,
   maxHeightRadio: MaxHeightRatio.HALF,
   disabled: false,

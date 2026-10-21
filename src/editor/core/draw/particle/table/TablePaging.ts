@@ -437,7 +437,8 @@ export class TablePaging {
         const fragHeight = (contentHeight + fragRepeatHeight) * scale
         newRowList.push({
           ...row,
-          height: fragHeight + rowMargin,
+          // 片段底部留白同样使用可配置的块间距（非首片段 offsetY 已为 0，仅底部生效）
+          height: fragHeight + this.draw.getTableBlockMargin(element),
           offsetY: isFirstFragment ? row.offsetY : 0,
           // 列表标记仅在首片段绘制
           isList: isFirstFragment ? row.isList : false,

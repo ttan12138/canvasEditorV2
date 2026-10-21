@@ -11,10 +11,13 @@ import {
 } from '../editor'
 import { Dialog } from '../components/dialog/Dialog'
 import { useEditorContext } from './context'
+import OptionsConfigDialog from './OptionsConfigDialog.vue'
 
 const ctx = useEditorContext()
 
 const rootRef = ref<HTMLDivElement | null>(null)
+// 选项配置对话框（通过 useEditorContext 自动拿到编辑器实例）
+const optRef = ref<InstanceType<typeof OptionsConfigDialog> | null>(null)
 const activeDropdown = ref<string | null>(null)
 const tableRow = ref(0)
 const tableCol = ref(0)
@@ -337,6 +340,16 @@ const onCellHover = (row: number, col: number) => {
         打印文件
       </button>
     </div>
+
+    <span class="ce-toolbar__divider" />
+
+    <div class="ce-toolbar__group">
+      <button type="button" title="选项配置" @click="optRef?.open()">
+        选项配置
+      </button>
+    </div>
+
+    <OptionsConfigDialog ref="optRef" />
   </div>
 </template>
 

@@ -55,7 +55,8 @@ describe('Zone', () => {
     expect(zone.getZoneByY(1100, 0)).toBe(EditorZone.MAIN)
 
     expect(zone.getZoneByY(10, 1)).toBe(EditorZone.HEADER)
-    expect(zone.getZoneByY(1100, 1)).toBe(EditorZone.FOOTER)
+    // 页脚顶部 = 页高(1123) - footer.bottom(15) - footer 高(0) = 1108，需 y > 1108 才命中页脚区
+    expect(zone.getZoneByY(1110, 1)).toBe(EditorZone.FOOTER)
   })
 
   it('setZone 在禁用页拒绝切换到页眉', () => {

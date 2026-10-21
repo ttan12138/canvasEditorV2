@@ -4,6 +4,12 @@ import type { Command } from '../editor'
 import type { IRangeStyle } from '../editor/interface/Listener'
 import type { PageInfo } from './types'
 
+/** 单元格配置对话框对外暴露的能力（由 <CellConfigDialog> 挂载时注册到 context） */
+export interface ICellConfigApi {
+  /** 按单元格 name 打开配置对话框 */
+  openByName: (name: string) => void
+}
+
 export interface EditorContext {
   /** 编辑器实例（未初始化时为 null） */
   getInstance: () => Editor | null
@@ -17,6 +23,8 @@ export interface EditorContext {
   isReady: Ref<boolean>
   /** 注册初始化完成回调（已就绪时立即执行） */
   onReady: (callback: (editor: Editor) => void) => void
+  /** 单元格配置对话框 API（<CellConfigDialog> 挂载后可用） */
+  cellConfig: Ref<ICellConfigApi | null>
 }
 
 export const EDITOR_CONTEXT_KEY: InjectionKey<EditorContext> =

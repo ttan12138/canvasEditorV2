@@ -8,7 +8,8 @@ import type {
   IRegisterContextMenu
 } from '../editor'
 import type { IPositionContext } from '../editor/interface/Position'
-import { EDITOR_CONTEXT_KEY, type EditorContext } from './context'
+import { EDITOR_CONTEXT_KEY, type EditorContext, type ICellConfigApi } from './context'
+import EditorDebug from './EditorDebug.vue'
 import {
   getPlaceholderTextControls,
   setControlValueByPlaceholder,
@@ -34,6 +35,8 @@ const props = withDefaults(
     syncData?: boolean
     /** 初始化完成后自动聚焦 */
     autoFocus?: boolean
+    /** 是否渲染内置调试面板（打印实例/打印Value/加载Value），默认关闭 */
+    debug?: boolean
   }>(),
   {
     options: () => ({}),
@@ -61,13 +64,17 @@ if (props.autoFocus) {
 
 const command = computed(() => editor.value?.command ?? null)
 
+// 单元格配置对话框 API（<CellConfigDialog> 挂载时注册），供 <EditorDebug> 跨 slot 调用
+const cellConfigApi = ref<ICellConfigApi | null>(null)
+
 const context: EditorContext = {
   getInstance: () => editor.value,
   getCommand: () => command.value,
   rangeStyle,
   pageInfo,
   isReady,
-  onReady
+  onReady,
+  cellConfig: cellConfigApi
 }
 provide(EDITOR_CONTEXT_KEY, context)
 
@@ -115,11 +122,15 @@ defineExpose({
 <template>
   <div class="canvas-editor">
     <slot name="toolbar" :command="command" :range-style="rangeStyle" :page-info="pageInfo" />
-    <div ref="containerRef" class="canvas-editor__container" v-bind="$attrs" />
+    <div class="canvas-editor__body">
+      <div ref="containerRef" class="canvas-editor__container" v-bind="$attrs" />
+      <!-- 右栏：默认插槽（对话框/浮层类子组件）与内置调试面板，均通过 useEditorContext 注入编辑器实例 -->
+      <div class="canvas-editor__aside" v-if="$slots.default || debug">
+        <slot />
+        <EditorDebug v-if="debug" />
+      </div>
+    </div>
     <slot name="footer" :page-info="pageInfo" />
-    <!-- 默认插槽：承载对话框/浮层类子组件（如 CellConfigDialog / OptionsConfigDialog），
-         它们通过 useEditorContext() 注入本组件提供的编辑器实例 -->
-    <slot />
   </div>
 </template>
 
@@ -134,10 +145,24 @@ defineExpose({
   background-color: #f2f4f7;
 }
 
+.canvas-editor__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+}
+
 .canvas-editor__container {
   position: relative;
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
   min-height: 0;
   overflow: auto;
+}
+
+.canvas-editor__aside {
+  flex: none;
+  display: flex;
+  min-height: 0;
 }
 </style>

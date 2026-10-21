@@ -3,8 +3,15 @@ import CanvasEditor from './CanvasEditor.vue'
 import EditorToolbar from './EditorToolbar.vue'
 import CellConfigDialog from './CellConfigDialog.vue'
 import OptionsConfigDialog from './OptionsConfigDialog.vue'
+import EditorDebug from './EditorDebug.vue'
 
-export { CanvasEditor, EditorToolbar, CellConfigDialog, OptionsConfigDialog }
+export {
+  CanvasEditor,
+  EditorToolbar,
+  CellConfigDialog,
+  OptionsConfigDialog,
+  EditorDebug
+}
 
 export { EDITOR_CONTEXT_KEY, useEditorContext } from './context'
 export type { EditorContext } from './context'
@@ -34,5 +41,6 @@ export const CanvasEditorPlugin: Plugin = {
     app.component('EditorToolbar', EditorToolbar)
     app.component('CellConfigDialog', CellConfigDialog)
     app.component('OptionsConfigDialog', OptionsConfigDialog)
+    app.component('EditorDebug', EditorDebug)
   }
 }

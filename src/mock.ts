@@ -744,7 +744,7 @@ export const commentList: IComment[] = [
 ]
 
 export const options: IEditorOption = {
-  margins: [100, 120, 100, 120],
+  margins: [50, 60, 50, 60],
   // 行级增量行计算（实验性，大文档打字提速）
   lab: {
     incrementalCompute: true
@@ -753,11 +753,12 @@ export const options: IEditorOption = {
     author: '游客1'
   },
   watermark: {
-    data: 'CANVAS-EDITOR',
+    data: '',
     size: 120
   },
   pageNumber: {
     // format: '第{pageNo}页/共{pageCount}页'
+    format: ''
   },
   placeholder: {
     data: '请输入正文'

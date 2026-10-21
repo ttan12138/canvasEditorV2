@@ -104,9 +104,12 @@ export class TableOperate {
   public insertTableTopRow() {
     const positionContext = this.position.getPositionContext()
     if (!positionContext.isTable) return
-    const { index, trIndex, tableId } = positionContext
+    const { index, trIndex, tableId, tablePath } = positionContext
     const originalElementList = this.draw.getOriginalElementList()
-    const element = originalElementList[index!]
+    // 嵌套（子）表格时 index 指向外层表格，需沿 tablePath 取到当前实际表格
+    const element =
+      this.position.getTableElementByContext(originalElementList, positionContext) ||
+      originalElementList[index!]
     const curTrList = element.trList!
     const curTr = curTrList[trIndex!]
     // 之前跨行的增加跨行数
@@ -149,15 +152,31 @@ export class TableOperate {
       })
     }
     curTrList.splice(trIndex!, 0, newTr)
-    // 重新设置上下文
+    // 重新设置上下文（保留嵌套表格路径）
+    const curTd = newTr.tdList[0]
+    const nextTablePath = tablePath?.length
+      ? tablePath.map((p, i) =>
+          i === tablePath.length - 1
+            ? {
+                ...p,
+                trIndex: trIndex!,
+                tdIndex: 0,
+                tdId: curTd?.id,
+                trId: newTr.id,
+                tableId
+              }
+            : p
+        )
+      : undefined
     this.position.setPositionContext({
       isTable: true,
       index,
       trIndex,
       tdIndex: 0,
-      tdId: newTr.tdList[0]?.id,
+      tdId: curTd?.id,
       trId: newTr.id,
-      tableId
+      tableId,
+      tablePath: nextTablePath
     })
     this.range.setRange(0, 0)
     // 重新渲染
@@ -168,9 +187,12 @@ export class TableOperate {
   public insertTableBottomRow() {
     const positionContext = this.position.getPositionContext()
     if (!positionContext.isTable) return
-    const { index, trIndex, tableId } = positionContext
+    const { index, trIndex, tableId, tablePath } = positionContext
     const originalElementList = this.draw.getOriginalElementList()
-    const element = originalElementList[index!]
+    // 嵌套（子）表格时 index 指向外层表格，需沿 tablePath 取到当前实际表格
+    const element =
+      this.position.getTableElementByContext(originalElementList, positionContext) ||
+      originalElementList[index!]
     const curTrList = element.trList!
     const curTr = curTrList[trIndex!]
     const anchorTr =
@@ -219,15 +241,31 @@ export class TableOperate {
       })
     }
     curTrList.splice(trIndex! + 1, 0, newTr)
-    // 重新设置上下文
+    // 重新设置上下文（保留嵌套表格路径）
+    const curTd = newTr.tdList[0]
+    const nextTablePath = tablePath?.length
+      ? tablePath.map((p, i) =>
+          i === tablePath.length - 1
+            ? {
+                ...p,
+                trIndex: trIndex! + 1,
+                tdIndex: 0,
+                tdId: curTd?.id,
+                trId: newTr.id,
+                tableId: element.id
+              }
+            : p
+        )
+      : undefined
     this.position.setPositionContext({
       isTable: true,
       index,
       trIndex: trIndex! + 1,
       tdIndex: 0,
-      tdId: newTr.tdList[0]?.id,
+      tdId: curTd?.id,
       trId: newTr.id,
-      tableId: element.id
+      tableId: element.id,
+      tablePath: nextTablePath
     })
     this.range.setRange(0, 0)
     // 重新渲染
@@ -262,11 +300,14 @@ export class TableOperate {
   public insertTableLeftCol() {
     const positionContext = this.position.getPositionContext()
     if (!positionContext.isTable) return
-    const { index, tdIndex, tableId } = positionContext
+    const { index, tdIndex, tableId, tablePath } = positionContext
     const originalElementList = this.draw.getOriginalElementList()
-    const element = originalElementList[index!]
+    // 嵌套（子）表格时 index 指向外层表格，需沿 tablePath 取到当前实际表格
+    const element =
+      this.position.getTableElementByContext(originalElementList, positionContext) ||
+      originalElementList[index!]
     const curTrList = element.trList!
-    const curTdIndex = tdIndex!
+    const curTdIndex = tdIndex ?? curTrList[0].tdList.length - 1
     // 增加列
     for (let t = 0; t < curTrList.length; t++) {
       const tr = curTrList[t]
@@ -293,15 +334,31 @@ export class TableOperate {
       width: defaultColMinWidth
     })
     this.adjustColWidth(element)
-    // 重新设置上下文
+    // 重新设置上下文（保留嵌套表格路径）
+    const curTd = curTrList[0].tdList[curTdIndex]
+    const nextTablePath = tablePath?.length
+      ? tablePath.map((p, i) =>
+          i === tablePath.length - 1
+            ? {
+                ...p,
+                trIndex: 0,
+                tdIndex: curTdIndex,
+                tdId: curTd?.id,
+                trId: curTrList[0].id,
+                tableId: element.id
+              }
+            : p
+        )
+      : undefined
     this.position.setPositionContext({
       isTable: true,
       index,
       trIndex: 0,
       tdIndex: curTdIndex,
-      tdId: curTrList[0].tdList[curTdIndex].id,
+      tdId: curTd?.id,
       trId: curTrList[0].id,
-      tableId
+      tableId: element.id,
+      tablePath: nextTablePath
     })
     this.range.setRange(0, 0)
     // 重新渲染
@@ -312,11 +369,14 @@ export class TableOperate {
   public insertTableRightCol() {
     const positionContext = this.position.getPositionContext()
     if (!positionContext.isTable) return
-    const { index, tdIndex, tableId } = positionContext
+    const { index, tdIndex, tableId, tablePath } = positionContext
     const originalElementList = this.draw.getOriginalElementList()
-    const element = originalElementList[index!]
+    // 嵌套（子）表格时 index 指向外层表格，需沿 tablePath 取到当前实际表格
+    const element =
+      this.position.getTableElementByContext(originalElementList, positionContext) ||
+      originalElementList[index!]
     const curTrList = element.trList!
-    const curTdIndex = tdIndex! + 1
+    const curTdIndex = (tdIndex ?? curTrList[0].tdList.length - 1) + 1
     // 增加列
     for (let t = 0; t < curTrList.length; t++) {
       const tr = curTrList[t]
@@ -343,15 +403,31 @@ export class TableOperate {
       width: defaultColMinWidth
     })
     this.adjustColWidth(element)
-    // 重新设置上下文
+    // 重新设置上下文（保留嵌套表格路径）
+    const curTd = curTrList[0].tdList[curTdIndex]
+    const nextTablePath = tablePath?.length
+      ? tablePath.map((p, i) =>
+          i === tablePath.length - 1
+            ? {
+                ...p,
+                trIndex: 0,
+                tdIndex: curTdIndex,
+                tdId: curTd?.id,
+                trId: curTrList[0].id,
+                tableId: element.id
+              }
+            : p
+        )
+      : undefined
     this.position.setPositionContext({
       isTable: true,
       index,
       trIndex: 0,
       tdIndex: curTdIndex,
-      tdId: curTrList[0].tdList[curTdIndex].id,
+      tdId: curTd?.id,
       trId: curTrList[0].id,
-      tableId: element.id
+      tableId: element.id,
+      tablePath: nextTablePath
     })
     this.range.setRange(0, 0)
     // 重新渲染

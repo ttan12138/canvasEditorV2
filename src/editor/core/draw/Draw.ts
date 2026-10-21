@@ -1688,6 +1688,7 @@ export class Draw {
     // 容器宽度需跟随纸张宽度
     this.container.style.position = 'relative'
     this.container.style.width = `${this.getWidth()}px`
+    this.container.style.margin = `0 auto`
     this.container.setAttribute(EDITOR_COMPONENT, EditorComponent.MAIN)
   }
 
@@ -1794,6 +1795,14 @@ export class Draw {
       (el.rowMargin ?? defaultRowMargin) *
       scale
     )
+  }
+
+  /** 表格作为块元素与后续内容之间的垂直间距（已乘 scale）。
+   *  element.blockMargin 优先于全局 options.table.blockMargin，默认沿用行距 rowMargin。
+   *  仅作用于表格底部留白，顶部始终紧贴上一行。 */
+  public getTableBlockMargin(element: IElement): number {
+    const { scale } = this.options
+    return (element.blockMargin ?? this.options.table.blockMargin) * scale
   }
 
   public computeRowList(payload: IComputeRowListPayload) {
@@ -2250,10 +2259,14 @@ export class Draw {
         metrics.width = elementWidth
         metrics.height = elementHeight
         metrics.boundingBoxDescent = elementHeight
-        metrics.boundingBoxAscent = -rowMargin
-        // 后一个元素也是表格则移除行间距
+        // 表格作为块元素与后续内容的垂直间距（可配置，已乘 scale）
+        // 默认 options.table.blockMargin(=8) 与行距 rowMargin 等价，即沿用原行为
+        const tableBlockMargin = this.getTableBlockMargin(element)
+        // 顶部紧贴上一行（抵消通用上下行距），底部预留 tableBlockMargin
+        metrics.boundingBoxAscent = -2 * rowMargin + tableBlockMargin
+        // 后一个元素也是表格则移除底部间距，使两表紧贴
         if (elementList[i + 1]?.type === ElementType.TABLE) {
-          metrics.boundingBoxAscent -= rowMargin
+          metrics.boundingBoxAscent = -2 * rowMargin
         }
       } else if (element.type === ElementType.SEPARATOR) {
         const {
