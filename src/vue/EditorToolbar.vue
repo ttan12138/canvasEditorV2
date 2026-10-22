@@ -111,6 +111,11 @@ const ALIGN_OPTIONS: Array<{ label: string; rowFlex: RowFlex }> = [
 // 字体族（与 index.html 菜单保持一致）
 const FONT_OPTIONS: Array<{ family: string; label: string }> = [
   { family: 'Microsoft YaHei', label: '微软雅黑' },
+  { family: 'SimSun', label: '宋体' },
+  { family: '等线', label: '等线' },
+  { family: 'SimHei', label: '黑体' },
+  { family: 'KaiTi', label: '楷体' },
+  { family: 'FangSong', label: '仿宋' },
   { family: '华文宋体', label: '华文宋体' },
   { family: '华文黑体', label: '华文黑体' },
   { family: '华文仿宋', label: '华文仿宋' },
@@ -121,8 +126,34 @@ const FONT_OPTIONS: Array<{ family: string; label: string }> = [
   { family: '华文行楷', label: '华文行楷' },
   { family: '华文中宋', label: '华文中宋' },
   { family: '华文彩云', label: '华文彩云' },
+  { family: '"PingFang SC"', label: '苹方' },
+  { family: '"Hiragino Sans GB"', label: '冬青黑体' },
+  { family: '"SourceHanSansCN-Regular"', label: '思源字体常规' },
+  { family: '"SourceHanSansCN-Bold"', label: '思源字体加粗' },
+  { family: '"Source Han Sans SC"', label: '思源黑体' },
+  { family: '"Source Han Serif SC"', label: '思源宋体' },
+  { family: '"Noto Sans SC"', label: 'Noto Sans SC' },
+  { family: '"Noto Serif SC"', label: 'Noto Serif SC' },
+  { family: 'monospace', label: '等宽字体' },
+  { family: 'cursive', label: '手写体' },
   { family: 'Arial', label: 'Arial' },
-  { family: 'Segoe UI', label: 'Segoe UI' },
+  { family: 'Helvetica', label: 'Helvetica' },
+  { family: '"Helvetica Neue"', label: 'Helvetica Neue' },
+  { family: 'Verdana', label: 'Verdana' },
+  { family: 'Tahoma', label: 'Tahoma' },
+  { family: '"Trebuchet MS"', label: 'Trebuchet MS' },
+  { family: '"Segoe UI"', label: 'Segoe UI' },
+  { family: 'Roboto', label: 'Roboto' },
+  { family: '"Noto Sans"', label: 'Noto Sans' },
+  { family: '"Times New Roman"', label: 'Times New Roman' },
+  { family: 'Georgia', label: 'Georgia' },
+  { family: 'Garamond', label: 'Garamond' },
+  { family: '"Courier New"', label: 'Courier New' },
+  { family: 'Consolas', label: 'Consolas' },
+  { family: 'Monaco', label: 'Monaco' },
+  { family: 'Menlo', label: 'Menlo' },
+  { family: '"Comic Sans MS"', label: 'Comic Sans MS' },
+  { family: 'Impact', label: 'Impact' },
   { family: 'Ink Free', label: 'Ink Free' },
   { family: 'Fantasy', label: 'Fantasy' }
 ]
@@ -157,7 +188,10 @@ const currentRowMargin = computed(() => {
   return rowMargin ? `${rowMargin}` : '行距'
 })
 
-const currentFont = computed(() => style.value?.font || '微软雅黑')
+const currentFont = computed(() => {
+  const font = style.value?.font || 'Microsoft YaHei'
+  return FONT_OPTIONS.find(f => f.family === font)?.label || font
+})
 
 const currentSizeLabel = computed(() => {
   const size = style.value?.size
