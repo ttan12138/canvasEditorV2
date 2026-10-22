@@ -42,6 +42,8 @@ export class CanvasEvent {
   public cachePositionList: IElementPosition[] | null
   public cachePositionContext: IPositionContext | null
   public mouseDownStartPosition: ICurrentPosition | null
+  /** 需求 4.1：控件内图片拖拽排序状态（mousedown 记录源序位，mouseup 消费交换） */
+  public controlImageDrag: { controlId: string; sourceOrder: number } | null
 
   private draw: Draw
   private pageContainer: HTMLDivElement
@@ -66,6 +68,7 @@ export class CanvasEvent {
     this.cachePositionList = null
     this.cachePositionContext = null
     this.mouseDownStartPosition = null
+    this.controlImageDrag = null
   }
 
   public getDraw(): Draw {

@@ -122,6 +122,7 @@ export class Command {
   public executeSetControlExtensionList: CommandAdapt['setControlExtensionList']
   public executeSetControlProperties: CommandAdapt['setControlProperties']
   public executeSetControlPropertiesList: CommandAdapt['setControlPropertiesList']
+  public executeDeleteControlImage: CommandAdapt['deleteControlImage']
   public executeSetControlHighlight: CommandAdapt['setControlHighlight']
   public executeValidate: CommandAdapt['validate']
   public executeClearValidate: CommandAdapt['clearValidate']
@@ -655,6 +656,10 @@ export class Command {
     this.executeSetControlHighlight = this.wrap(
       'executeSetControlHighlight',
       adapt.setControlHighlight.bind(adapt)
+    )
+    this.executeDeleteControlImage = this.wrap(
+      'executeDeleteControlImage',
+      adapt.deleteControlImage.bind(adapt)
     )
     this.executeValidate = this.wrap(
       'executeValidate',

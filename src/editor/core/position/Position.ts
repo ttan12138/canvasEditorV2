@@ -421,6 +421,8 @@ export class Position {
       // 当前行X/Y轴偏移量
       x += curRow.offsetX || 0
       y += curRow.offsetY || 0
+      // 正文首表格固定上移：定位 y 同步上移，使命中/光标位置与视觉绘制一致
+      y -= curRow.anchorTopOffset || 0
       // 当前td所在位置
       const tablePreX = x
       const tablePreY = y

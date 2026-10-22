@@ -2577,6 +2577,23 @@ export class Draw {
             (element.spacingBefore || elementList[i + 1]?.spacingBefore || 0) *
             scale
         }
+        // 需求：正文首个内容为表格时，固定上移一个行距，消除其与页眉间的
+        // 间隙，使首行表格与分页首行表格表现一致（上移量记入 anchorTopOffset，
+        // 由位置层与绘制层统一应用，行高保持不变以避免与下方间距错位）。
+        // 注意：formatElementList 会在文档首补偿 ZERO 零宽字符，表格的实际
+        // 元素索引通常为 1，故用「当前是首个生成的行」判断而非 i === 0
+        if (
+          payload.isMainBody &&
+          !payload.resume &&
+          element.type === ElementType.TABLE &&
+          // 文档首补偿的 ZERO 零宽字符会先生成一个空行，故「正文首个内容」
+          // 的判断为：表格之前仅存在零宽补偿字符（而非 rowList 为空）
+          elementList.slice(0, i).every(el => !el.type && el.value === ZERO)
+        ) {
+          row.anchorTopOffset =
+            this.options.defaultBasicRowMarginHeight *
+            this.options.defaultRowMargin
+        }
         rowList.push(row)
       } else {
         // 断点续算：种子行吸收行首元素时补齐行出生属性（列表缩进/序号、区域偏移），
@@ -2801,6 +2818,9 @@ export class Draw {
       for (let i = 0; i < this.rowList.length; i++) {
         const row = this.rowList[i]
         const rowOffsetY = row.offsetY || 0
+        // 正文首表格固定上移量：同步到分页累计，避免分页位置与绘制错位
+        const anchorTop = row.anchorTopOffset || 0
+        const rowAdvance = row.height + rowOffsetY - anchorTop
         // 分栏内栏切换：重置当前页累计高度，留在本页
         const columnChanged =
           prevColumnIndex !== undefined &&
@@ -2809,10 +2829,10 @@ export class Draw {
           row.columnIndex !== prevColumnIndex
         if (columnChanged) {
           pageHeight =
-            this.getMainOuterHeight(pageNo, direction) + row.height + rowOffsetY
+            this.getMainOuterHeight(pageNo, direction) + rowAdvance
           pageRowList[pageNo].push(row)
         } else if (
-          row.height + rowOffsetY + pageHeight > pageLimit ||
+          rowAdvance + pageHeight > pageLimit ||
           this.rowList[i - 1]?.isPageBreak
         ) {
           if (Number.isInteger(maxPageNo) && pageNo >= maxPageNo!) {
@@ -2845,10 +2865,10 @@ export class Draw {
           }
           pageDirectionList[pageNo] = direction
           pageHeight =
-            this.getMainOuterHeight(pageNo, direction) + row.height + rowOffsetY
+            this.getMainOuterHeight(pageNo, direction) + rowAdvance
           pageRowList.push([row])
         } else {
-          pageHeight += row.height + rowOffsetY
+          pageHeight += rowAdvance
           pageRowList[pageNo].push(row)
         }
         prevColumnIndex = row.columnIndex
@@ -3602,7 +3622,8 @@ export class Draw {
         isPagingMode,
         innerWidth,
         surroundElementList,
-        elementList: this.elementList
+        elementList: this.elementList,
+        isMainBody: true
       }
       // 行级增量行计算：消费本次编辑的脏区间，从受影响行续算至收敛；
       // 无脏区间或门控不满足时退回全量，行为与未开启时一致

@@ -14,6 +14,7 @@ import {
   visitElementTree
 } from '../../../utils/element'
 import { CanvasEvent } from '../CanvasEvent'
+import { applyControlImageSort } from './controlImageDrag'
 
 type IDragElement = IElement & { dragId: string }
 
@@ -86,6 +87,12 @@ function moveImgPosition(
 }
 
 export function mouseup(evt: MouseEvent, host: CanvasEvent) {
+  // 需求 4.1：控件内图片拖拽排序（只读/表单模式）
+  if (host.controlImageDrag) {
+    applyControlImageSort(evt, host)
+    host.controlImageDrag = null
+    return
+  }
   // 判断是否允许拖放
   if (host.isAllowDrop) {
     const draw = host.getDraw()
@@ -177,10 +184,14 @@ export function mouseup(evt: MouseEvent, host: CanvasEvent) {
         (cacheStartElement.controlId === cacheEndElement.controlId &&
           cacheStartElement.controlComponent === ControlComponent.PREFIX &&
           cacheEndElement.controlComponent === ControlComponent.POSTFIX) ||
+        // 需求 4.1：排除控件内图片（imageControl 为 TEXT 型控件，VALUE 元素是图片，
+        // 拖拽移动会拆坏控件值导致图片丢失与命中错位）
         (cacheStartElement.control?.type === ControlType.TEXT &&
           cacheStartElement.controlComponent === ControlComponent.VALUE &&
+          cacheStartElement.type !== ElementType.IMAGE &&
           cacheEndElement.control?.type === ControlType.TEXT &&
-          cacheEndElement.controlComponent === ControlComponent.VALUE)
+          cacheEndElement.controlComponent === ControlComponent.VALUE &&
+          cacheEndElement.type !== ElementType.IMAGE)
       if (!isAllowDragControl) {
         draw.render({
           curIndex: range.startIndex,

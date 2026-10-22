@@ -42,6 +42,7 @@ import { ICatalog } from '../../interface/Catalog'
 import { DeepRequired } from '../../interface/Common'
 import { IComparePayload } from '../../interface/Compare'
 import {
+  IControl,
   IControlValidateResult,
   IControlPlaceholderValue,
   IGetControlValueOption,
@@ -2820,6 +2821,51 @@ export class CommandAdapt {
 
   public setControlProperties(payload: ISetControlProperties) {
     this.draw.getControl().setPropertiesListById([payload])
+  }
+
+  // 需求 4.2：删除图片控件内指定图片并通知宿主（只读/表单模式右键删除）
+  public deleteControlImage(payload: {
+    controlId: string
+    /** 图片元素在当前渲染元素列表中的索引 */
+    elementIndex: number
+    /** 当前删除的图像 base64 */
+    deletedImageValue: string
+  }) {
+    const { controlId, elementIndex, deletedImageValue } = payload
+    // 计算被删图片在控件值内的序位
+    const elementList = this.draw.getElementList()
+    let order = -1
+    let count = 0
+    for (let i = 0; i < elementList.length; i++) {
+      const el = elementList[i]
+      if (el.controlId === controlId && el.type === ElementType.IMAGE) {
+        if (i === elementIndex) order = count
+        count++
+      }
+    }
+    if (!~order) return
+    const results = this.getControlValue({ id: controlId })
+    if (!results?.length) return
+    const target = results[0]
+    const imageElements = (target.elementList ?? []).filter(
+      el => el.type === ElementType.IMAGE
+    )
+    if (order >= imageElements.length) return
+    const remainImages = imageElements.filter((_, i) => i !== order)
+    this.setControlValue({
+      id: controlId,
+      value: deepClone(remainImages),
+      isSubmitHistory: false
+    })
+    const eventBus = this.draw.getEventBus()
+    if (eventBus.isSubscribe('controlImageDelete')) {
+      eventBus.emit('controlImageDelete', {
+        placeholder: target.placeholder ?? '',
+        deletedImageValue,
+        control: target as unknown as IControl,
+        values: remainImages
+      })
+    }
   }
 
   public setControlPropertiesList(payload: ISetControlProperties[]) {

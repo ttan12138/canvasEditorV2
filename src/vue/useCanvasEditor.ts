@@ -9,6 +9,7 @@ import {
   type ShallowRef
 } from 'vue'
 import Editor from '../editor'
+import docxPlugin from '../plugins/docx/docx.js'
 import type { IEditorData, IEditorOption, IElement } from '../editor'
 import type { IUpdateOption } from '../editor/interface/Editor'
 import type { IRangeStyle } from '../editor/interface/Listener'
@@ -115,6 +116,8 @@ export function useCanvasEditor(option: UseCanvasEditorOption) {
   onMounted(() => {
     if (!container.value) return
     const instance = new Editor(container.value, data(), options())
+    // 注册 docx 导入/导出插件，挂载 command.executeImportDocx / executeExportDocx
+    instance.use(docxPlugin)
     editor.value = instance
     const eventBus = getEventBus(instance)
     EDITOR_EVENTS.forEach(name => {

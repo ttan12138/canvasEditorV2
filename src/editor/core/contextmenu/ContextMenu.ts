@@ -174,9 +174,21 @@ export class ContextMenu {
     const endElement = elementList[endIndex] || null
     // 当前区域
     const zone = this.draw.getZone().getZone()
+    // 需求 4.2/12：将图片控件的删除开关注入上下文，供右键菜单 when 读取
+    let imageCanDelete: boolean | undefined
+    if (startElement?.controlId) {
+      const controlValue = this.draw
+        .getControl()
+        .getValueById({ id: startElement.controlId })?.[0]
+      if (controlValue) {
+        imageCanDelete = controlValue.imageCanDelete
+      }
+    }
     return {
       startElement,
       endElement,
+      startIndex,
+      elementList,
       isReadonly,
       isFormMode,
       editorHasSelection,
@@ -187,6 +199,7 @@ export class ContextMenu {
       trIndex: trIndex ?? null,
       tdIndex: tdIndex ?? null,
       tableElement,
+      imageCanDelete,
       options: this.options
     }
   }

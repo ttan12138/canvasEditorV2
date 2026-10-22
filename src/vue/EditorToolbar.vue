@@ -21,6 +21,29 @@ const optRef = ref<InstanceType<typeof OptionsConfigDialog> | null>(null)
 const activeDropdown = ref<string | null>(null)
 const tableRow = ref(0)
 const tableCol = ref(0)
+// 导入 docx：隐藏的文件选择器 + 读取 ArrayBuffer 后调用 executeImportDocx
+const docxInputRef = ref<HTMLInputElement | null>(null)
+const importDocx = () => {
+  docxInputRef.value?.click()
+}
+const onDocxFileChange = (evt: Event) => {
+  const input = evt.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = () => {
+    const command = ctx.getCommand()
+    if (!command) return
+    ;(command as unknown as {
+      executeImportDocx: (opts: { arrayBuffer: ArrayBuffer }) => void
+    }).executeImportDocx({ arrayBuffer: reader.result as ArrayBuffer })
+    input.value = ''
+  }
+  reader.onerror = () => {
+    input.value = ''
+  }
+  reader.readAsArrayBuffer(file)
+}
 
 const style = computed(() => ctx.rangeStyle.value)
 
@@ -85,6 +108,45 @@ const ALIGN_OPTIONS: Array<{ label: string; rowFlex: RowFlex }> = [
   { label: '两端对齐', rowFlex: RowFlex.ALIGNMENT }
 ]
 
+// 字体族（与 index.html 菜单保持一致）
+const FONT_OPTIONS: Array<{ family: string; label: string }> = [
+  { family: 'Microsoft YaHei', label: '微软雅黑' },
+  { family: '华文宋体', label: '华文宋体' },
+  { family: '华文黑体', label: '华文黑体' },
+  { family: '华文仿宋', label: '华文仿宋' },
+  { family: '华文楷体', label: '华文楷体' },
+  { family: '华文琥珀', label: '华文琥珀' },
+  { family: '华文隶书', label: '华文隶书' },
+  { family: '华文新魏', label: '华文新魏' },
+  { family: '华文行楷', label: '华文行楷' },
+  { family: '华文中宋', label: '华文中宋' },
+  { family: '华文彩云', label: '华文彩云' },
+  { family: 'Arial', label: 'Arial' },
+  { family: 'Segoe UI', label: 'Segoe UI' },
+  { family: 'Ink Free', label: 'Ink Free' },
+  { family: 'Fantasy', label: 'Fantasy' }
+]
+
+// 字号（与 index.html 菜单保持一致）
+const SIZE_OPTIONS: Array<{ size: number; label: string }> = [
+  { size: 56, label: '初号' },
+  { size: 48, label: '小初' },
+  { size: 34, label: '一号' },
+  { size: 32, label: '小一' },
+  { size: 29, label: '二号' },
+  { size: 24, label: '小二' },
+  { size: 21, label: '三号' },
+  { size: 20, label: '小三' },
+  { size: 18, label: '四号' },
+  { size: 16, label: '小四' },
+  { size: 14, label: '五号' },
+  { size: 12, label: '小五' },
+  { size: 10, label: '六号' },
+  { size: 8, label: '小六' },
+  { size: 7, label: '七号' },
+  { size: 6, label: '八号' }
+]
+
 const currentTitle = computed(() => {
   const level = style.value?.level
   return TITLE_OPTIONS.find(item => item.level === level)?.label ?? '正文'
@@ -93,6 +155,14 @@ const currentTitle = computed(() => {
 const currentRowMargin = computed(() => {
   const rowMargin = style.value?.rowMargin
   return rowMargin ? `${rowMargin}` : '行距'
+})
+
+const currentFont = computed(() => style.value?.font || '微软雅黑')
+
+const currentSizeLabel = computed(() => {
+  const size = style.value?.size
+  if (!size) return '小四'
+  return SIZE_OPTIONS.find(s => s.size === size)?.label ?? `${size}`
 })
 
 const scaleText = computed(
@@ -109,6 +179,10 @@ const isTitleActive = (level: TitleLevel | null) =>
 
 const isRowMarginActive = (rowMargin: number) =>
   style.value?.rowMargin === rowMargin
+
+const isFontActive = (family: string) => style.value?.font === family
+
+const isSizeActive = (size: number) => style.value?.size === size
 
 const isListActive = (listType: ListType | null, listStyle?: ListStyle) =>
   (style.value?.listType ?? null) === listType &&
@@ -217,6 +291,37 @@ const onCellHover = (row: number, col: number) => {
     <span class="ce-toolbar__divider" />
 
     <div class="ce-toolbar__group">
+      <div class="ce-toolbar__dropdown">
+        <button type="button" class="ce-toolbar__select-btn" @click="toggleDropdown('font')">
+          {{ currentFont }}
+        </button>
+        <ul v-if="activeDropdown === 'font'" class="ce-toolbar__options">
+          <li v-for="f in FONT_OPTIONS" :key="f.family" :class="{ 'is-active': isFontActive(f.family) }"
+            :style="{ fontFamily: f.family }" @click="run(c => c.executeFont(f.family)); closeDropdown()">
+            {{ f.label }}
+          </li>
+        </ul>
+      </div>
+
+      <div class="ce-toolbar__dropdown">
+        <button type="button" class="ce-toolbar__select-btn" @click="toggleDropdown('size')">
+          {{ currentSizeLabel }}
+        </button>
+        <ul v-if="activeDropdown === 'size'" class="ce-toolbar__options">
+          <li v-for="s in SIZE_OPTIONS" :key="s.size" :class="{ 'is-active': isSizeActive(s.size) }"
+            @click="run(c => c.executeSize(s.size)); closeDropdown()">
+            {{ s.label }}
+          </li>
+        </ul>
+      </div>
+
+      <button type="button" title="减小字号" @click="run(c => c.executeSizeMinus())">
+        A-
+      </button>
+      <span class="ce-toolbar__text">{{ style?.size ?? '--' }}</span>
+      <button type="button" title="增大字号" @click="run(c => c.executeSizeAdd())">
+        A+
+      </button>
       <button type="button" :class="{ 'is-active': isActive('bold') }" @click="run(c => c.executeBold())">
         <b>B</b>
       </button>
@@ -229,12 +334,11 @@ const onCellHover = (row: number, col: number) => {
       <button type="button" :class="{ 'is-active': isActive('strikeout') }" @click="run(c => c.executeStrikeout())">
         <s>S</s>
       </button>
-      <button type="button" title="减小字号" @click="run(c => c.executeSizeMinus())">
-        A-
+      <button type="button" title="上标" @click="run(c => c.executeSuperscript())">
+        X²
       </button>
-      <span class="ce-toolbar__text">{{ style?.size ?? '--' }}</span>
-      <button type="button" title="增大字号" @click="run(c => c.executeSizeAdd())">
-        A+
+      <button type="button" title="下标" @click="run(c => c.executeSubscript())">
+        X₂
       </button>
       <label class="ce-toolbar__color" title="字体颜色">
         A
@@ -344,9 +448,19 @@ const onCellHover = (row: number, col: number) => {
     <span class="ce-toolbar__divider" />
 
     <div class="ce-toolbar__group">
+      <button type="button" title="导入 docx 文件" @click="importDocx">
+        导入docx
+      </button>
       <button type="button" title="选项配置" @click="optRef?.open()">
         选项配置
       </button>
+      <input
+        ref="docxInputRef"
+        type="file"
+        accept=".docx"
+        style="display: none"
+        @change="onDocxFileChange"
+      />
     </div>
 
     <OptionsConfigDialog ref="optRef" />
@@ -444,12 +558,22 @@ const onCellHover = (row: number, col: number) => {
   position: relative;
 }
 
+.ce-toolbar__select-btn {
+  width: 96px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-align: left;
+}
+
 .ce-toolbar__options {
   position: absolute;
   top: 28px;
   left: 0;
   z-index: 10;
   min-width: 96px;
+  max-height: 280px;
+  overflow: auto;
   padding: 4px;
   background: #fff;
   border: 1px solid #e2e6ed;

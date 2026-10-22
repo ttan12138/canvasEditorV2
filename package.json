@@ -55,7 +55,8 @@
   "scripts": {
     "dev": "vite",
     "dev:vue": "vite --open /vue.html",
-    "lib": "eslint . && tsc && vite build --mode lib && node scripts/copy-lib.mjs",
+    "lib": "eslint . && tsc && vite build --mode lib",
+    "lib:copy": "eslint . && tsc && vite build --mode lib && node scripts/copy-lib.mjs",
     "lib:vue": "eslint . && tsc --noEmit && vite build --mode vue",
     "build": "eslint . && tsc && vitest run && vite build --mode app",
     "serve": "vite preview",

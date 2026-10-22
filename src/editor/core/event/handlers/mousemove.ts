@@ -2,9 +2,15 @@ import { ImageDisplay } from '../../../dataset/enum/Common'
 import { ControlComponent } from '../../../dataset/enum/Control'
 import { ElementType } from '../../../dataset/enum/Element'
 import { CanvasEvent } from '../CanvasEvent'
+import { showControlImageDropIndicator } from './controlImageDrag'
 
 export function mousemove(evt: MouseEvent, host: CanvasEvent) {
   const draw = host.getDraw()
+  // 需求 4.1：图片排序拖拽过程中显示插入位置指示线
+  if (host.controlImageDrag) {
+    showControlImageDropIndicator(evt, host)
+    return
+  }
   // 留痕模式：hover 到带 trace 标记的元素时显示作者/时间浮窗
   draw.getTraceParticle().handleMouseMove(evt)
   // 悬浮提示：hover 到配置了 hint 的元素时显示提示浮窗

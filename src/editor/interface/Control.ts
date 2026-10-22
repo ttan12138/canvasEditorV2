@@ -96,6 +96,14 @@ export interface IControlBasic {
   disabledBackgroundColor?: string
   existValueBackgroundColor?: string
   noValueBackgroundColor?: string
+  /** 需求 4/12：图片控件标识（value 为一组图片元素的控件） */
+  imageControl?: boolean
+  /** 需求 4.1/12：控件内图片是否支持拖拽调整顺序 */
+  imageDraggable?: boolean
+  /** 需求 4.2/12：控件内图片是否支持右键删除（图片级 canDelete 优先） */
+  imageCanDelete?: boolean
+  /** 需求 11：表单模式下控件是否可编辑（缺省可编辑，false 不可编辑） */
+  editable?: boolean
 }
 
 export interface IControlStyle {

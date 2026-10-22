@@ -22,6 +22,7 @@
   },
   "include": ["./src/", "./tests/", "./vite.config.ts"],
   "exclude": [
+    "./src/plugins/docx",
     "node_modules",
     "dist"
   ]

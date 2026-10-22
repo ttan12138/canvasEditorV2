@@ -6,6 +6,10 @@ import type { IElement, IEditorData } from '../editor'
 import {
   getPlaceholderTextControls,
   setControlValueByPlaceholder,
+  setControlEditableByPlaceholder,
+  setImageControlConfigForAll,
+  setImageControlConfigByPlaceholder,
+  type IImageControlConfig,
   type IReplaceValueDetail
 } from './control'
 
@@ -294,6 +298,91 @@ const replaceAcrossZones = () => {
   resultText.value =
     '已对页眉/页脚/正文中的「区域占位符」统一替换，请用「需求3」查看三区结果'
 }
+
+// ============ 需求 4.2：监听控件图片删除通知 ============
+let imageDeleteListenerBound = false
+const bindImageDeleteListener = () => {
+  const instance = ctx.getInstance()
+  if (!instance || imageDeleteListenerBound) return
+  imageDeleteListenerBound = true
+  instance.eventBus.on('controlImageDelete', payload => {
+    console.log('[需求4.2] 控件图片删除通知', payload)
+    resultText.value = JSON.stringify(payload, null, 2)
+  })
+}
+
+// ============ 需求 4.1：控件内图片拖拽排序 ============
+const enableImageDrag = () => {
+  const command = cmd()
+  if (!command) return
+  // 5 张不同颜色的图片，便于直观验证拖拽交换顺序（count=3 表示一行 3 张）
+  const colors = ['#3a6ea5', '#7a4ea5', '#a54e6e', '#4ea55a', '#a58a4e']
+  const values = colors.map(c => ({
+    value: makeSampleImage(200, 80, c),
+    valueType: 'IMAGE' as const
+  }))
+  setControlValueByPlaceholder(command, {
+    name: '单元格签名',
+    valueType: 'IMAGE',
+    count: 3,
+    draggable: true,
+    values
+  })
+  resultText.value =
+    '已写入 5 张不同颜色可拖拽图片（只读/表单模式下按住一张图拖到另一张上交换顺序，count=3 一行 3 张）'
+}
+
+// ============ 需求 4.2：右键删除控件内图片 ============
+const enableImageDelete = () => {
+  const command = cmd()
+  if (!command) return
+  bindImageDeleteListener()
+  replaceImageByPlaceholder('单元格签名', '', {
+    count: 2,
+    values: [
+      {
+        value: makeSampleImage(200, 80, '#3a6ea5'),
+        valueType: 'IMAGE'
+      },
+      {
+        value: makeSampleImage(120, 60, '#7a4ea5'),
+        valueType: 'IMAGE'
+      }
+    ],
+    draggable: true,
+    canDelete: true
+  })
+  resultText.value =
+    '已写入 2 张可删除图片（只读/表单模式下右键图片→「删除图片」，删除后通知见输出区）'
+}
+
+// ============ 需求 11：表单模式按占位符设置控件可/不可编辑 ============
+const setControlEditable = (name: string, editable: boolean) => {
+  const command = cmd()
+  if (!command) return
+  const count = setControlEditableByPlaceholder(command, name, editable)
+  resultText.value = `已设置 ${count} 个占位符「${name}」控件为${editable ? '可编辑' : '不可编辑'}（切到表单模式验证）`
+}
+
+// ============ 需求 12.1：统一设置所有图片控件删除/拖拽能力 ============
+const setAllImageConfig = (config: IImageControlConfig) => {
+  const command = cmd()
+  if (!command) return
+  bindImageDeleteListener()
+  const count = setImageControlConfigForAll(command, config)
+  resultText.value = `已统一设置 ${count} 个图片控件：canDelete=${config.canDelete}, draggable=${config.draggable}（切到只读/表单模式验证）`
+}
+
+// ============ 需求 12.2：按占位符单独设置图片控件删除/拖拽能力 ============
+const setImageConfig = (name: string, config: IImageControlConfig) => {
+  const command = cmd()
+  if (!command) return
+  bindImageDeleteListener()
+  const count = setImageControlConfigByPlaceholder(command, name, config)
+  resultText.value = count
+    ? `已单独设置 ${count} 个图片控件「${name}」：${JSON.stringify(config)}`
+    : `未找到图片控件「${name}」（非图片控件设置无效果）`
+}
 </script>
 
 <template>
@@ -413,6 +502,40 @@ const replaceAcrossZones = () => {
         <div class="editor-debug__row">
           <button type="button" @click="replaceAcrossZones">统一替换三区「区域占位符」</button>
           <button type="button" @click="listPlaceholderControls">查看三区结果</button>
+        </div>
+      </details>
+
+      <details open>
+        <summary>需求 4.1/4.2/11/12：图片交互 / 控件编辑</summary>
+        <div class="editor-debug__row">
+          <span class="editor-debug__grp">4.1 拖拽排序：</span>
+          <button type="button" @click="enableImageDrag">写入 5 张可拖拽图片（单元格签名）</button>
+          <span class="editor-debug__tip">只读/表单模式下按住一张图拖到另一张上交换顺序（5 张不同颜色，count=3）</span>
+        </div>
+        <div class="editor-debug__row">
+          <span class="editor-debug__grp">4.2 右键删除：</span>
+          <button type="button" @click="enableImageDelete">写入 2 张可删除图片（单元格签名）</button>
+          <span class="editor-debug__tip">只读/表单模式下右键图片→「删除图片」，通知见输出区</span>
+        </div>
+        <div class="editor-debug__row">
+          <span class="editor-debug__grp">11 表单编辑：</span>
+          <button type="button" @click="setControlEditable('患者姓名', false)">『患者姓名』不可编辑</button>
+          <button type="button" @click="setControlEditable('患者姓名', true)">『患者姓名』可编辑</button>
+          <span class="editor-debug__tip">切到表单模式验证</span>
+        </div>
+        <div class="editor-debug__row">
+          <span class="editor-debug__grp">12.1 统一设置：</span>
+          <button type="button" @click="setAllImageConfig({ canDelete: true, draggable: true })">全部图片控件：可删+可拖</button>
+          <button type="button" @click="setAllImageConfig({ canDelete: false, draggable: false })">全部图片控件：关闭</button>
+          <span class="editor-debug__tip">只读模式下对所有图片控件生效</span>
+        </div>
+        <div class="editor-debug__row">
+          <span class="editor-debug__grp">12.2 单独设置：</span>
+          <button type="button"
+            @click="setImageConfig('单元格签名', { canDelete: true, draggable: true })">『单元格签名』可删+可拖</button>
+          <button type="button"
+            @click="setImageConfig('单元格签名', { canDelete: false, draggable: false })">『单元格签名』关闭</button>
+          <button type="button" @click="setImageConfig('患者姓名', { canDelete: true })">『患者姓名』（非图片控件，无效）</button>
         </div>
       </details>
 

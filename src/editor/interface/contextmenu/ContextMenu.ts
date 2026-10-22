@@ -7,6 +7,10 @@ import { IElement } from '../Element'
 export interface IContextMenuContext {
   startElement: IElement | null
   endElement: IElement | null
+  /** 当前右键元素索引（渲染元素列表下标，用于控件内图片定位） */
+  startIndex: number
+  /** 当前渲染元素列表（与 startIndex 配套定位控件内图片序位） */
+  elementList: IElement[]
   isReadonly: boolean
   isFormMode: boolean
   editorHasSelection: boolean
@@ -14,6 +18,8 @@ export interface IContextMenuContext {
   isInTable: boolean
   isCrossRowCol: boolean
   zone: EditorZone
+  /** 需求 4.2/12：图片控件右键删除开关（控件级 imageCanDelete，由上下文注入） */
+  imageCanDelete?: boolean
   trIndex: number | null
   tdIndex: number | null
   tableElement: IElement | null

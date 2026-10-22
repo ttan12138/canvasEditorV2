@@ -10,6 +10,7 @@ import { isMod } from '../../../utils/hotkey'
 import { CheckboxControl } from '../../draw/control/checkbox/CheckboxControl'
 import { RadioControl } from '../../draw/control/radio/RadioControl'
 import { CanvasEvent } from '../CanvasEvent'
+import { setupControlImageSortDrag } from './controlImageDrag'
 import { IElement } from '../../../interface/Element'
 import type { ITd } from '../../../interface/table/Td'
 import { Draw } from '../../draw/Draw'
@@ -187,8 +188,45 @@ export function mousedown(evt: MouseEvent, host: CanvasEvent) {
       }
     }
   }
+  // 需求 4.1/4.2：图片控件（imageControl）在表单/只读模式会渲染前导标记，
+  // 点击第一张图片时可能命中前导标记而非图片本身，导致选不中。
+  // 将非图片的命中纠正为控件内最近的图片元素，并同步 isDirectHitImage。
+  if (
+    curElement &&
+    curElement.controlId &&
+    curElement.type !== ElementType.IMAGE
+  ) {
+    const ctrl = draw
+      .getControl()
+      .getValueById({ id: curElement.controlId })?.[0]
+    if (ctrl?.imageControl) {
+      const list = isTable ? (draw.getTd()?.value ?? []) : elementList
+      let nearest = -1
+      let nearestDist = Infinity
+      for (let k = 0; k < list.length; k++) {
+        const el = list[k]
+        if (
+          el.controlId === curElement.controlId &&
+          el.type === ElementType.IMAGE
+        ) {
+          const dist = Math.abs(k - curIndex)
+          if (dist < nearestDist) {
+            nearestDist = dist
+            nearest = k
+          }
+        }
+      }
+      if (~nearest) {
+        curIndex = nearest
+        curElement = list[nearest]
+      }
+    }
+  }
   // 绘制
-  const isDirectHitImage = !!(isDirectHit && isImage)
+  const isDirectHitImage = !!(
+    (isDirectHit && isImage) ||
+    (curElement.type === ElementType.IMAGE && curElement.controlId)
+  )
   const isDirectHitCheckbox = !!(isDirectHit && isCheckbox)
   const isDirectHitRadio = !!(isDirectHit && isRadio)
   const isDirectHitLabel = !!(isDirectHit && isLabel)
@@ -197,6 +235,9 @@ export function mousedown(evt: MouseEvent, host: CanvasEvent) {
     let endIndex = curIndex
     // 选区锚点（固定端）：光标位置作为锚点，点击位置作为活动端
     let anchorIndex = curIndex
+    // 需求 11：表单模式下 editable === false 的控件不可聚焦（点击不进入光标/激活）
+    const isControlDisabled =
+      draw.getMode() === EditorMode.FORM && curElement.control?.editable === false
     // shift激活时进行选区处理
     if (evt.shiftKey) {
       const { startIndex: oldStartIndex, endIndex: oldEndIndex } =
@@ -221,58 +262,60 @@ export function mousedown(evt: MouseEvent, host: CanvasEvent) {
         }
       }
     }
-    rangeManager.setRange(startIndex, endIndex)
-    const isShiftSelection = startIndex !== endIndex
-    position.setCursorPosition(positionList[anchorIndex])
-    // 更新只读状态
-    isReadonly = draw.isReadonly()
-    // 复选框
-    if (isDirectHitCheckbox && !isReadonly) {
-      hitCheckbox(curElement, draw)
-    } else if (isDirectHitRadio && !isReadonly) {
-      hitRadio(curElement, draw)
-    } else if (
-      curElement.controlComponent === ControlComponent.VALUE &&
-      (curElement.control?.type === ControlType.CHECKBOX ||
-        curElement.control?.type === ControlType.RADIO)
-    ) {
-      // 向左查找
-      let preIndex = curIndex
-      while (preIndex > 0) {
-        const preElement = elementList[preIndex]
-        if (preElement.controlComponent === ControlComponent.CHECKBOX) {
-          hitCheckbox(preElement, draw)
-          break
-        } else if (preElement.controlComponent === ControlComponent.RADIO) {
-          hitRadio(preElement, draw)
-          break
+    if (!isControlDisabled) {
+      rangeManager.setRange(startIndex, endIndex)
+      const isShiftSelection = startIndex !== endIndex
+      position.setCursorPosition(positionList[anchorIndex])
+      // 更新只读状态
+      isReadonly = draw.isReadonly()
+      // 复选框
+      if (isDirectHitCheckbox && !isReadonly) {
+        hitCheckbox(curElement, draw)
+      } else if (isDirectHitRadio && !isReadonly) {
+        hitRadio(curElement, draw)
+      } else if (
+        curElement.controlComponent === ControlComponent.VALUE &&
+        (curElement.control?.type === ControlType.CHECKBOX ||
+          curElement.control?.type === ControlType.RADIO)
+      ) {
+        // 向左查找
+        let preIndex = curIndex
+        while (preIndex > 0) {
+          const preElement = elementList[preIndex]
+          if (preElement.controlComponent === ControlComponent.CHECKBOX) {
+            hitCheckbox(preElement, draw)
+            break
+          } else if (preElement.controlComponent === ControlComponent.RADIO) {
+            hitRadio(preElement, draw)
+            break
+          }
+          preIndex--
         }
-        preIndex--
+      } else {
+        draw.render({
+          curIndex,
+          isCompute: false,
+          isSubmitHistory: false,
+          // shift选区时保持光标在锚点（与键盘扩展选区一致）
+          isSetCursor:
+            !isShiftSelection &&
+            !isDirectHitImage &&
+            !isDirectHitCheckbox &&
+            !isDirectHitRadio
+        })
       }
-    } else {
-      draw.render({
-        curIndex,
-        isCompute: false,
-        isSubmitHistory: false,
-        // shift选区时保持光标在锚点（与键盘扩展选区一致）
-        isSetCursor:
-          !isShiftSelection &&
-          !isDirectHitImage &&
-          !isDirectHitCheckbox &&
-          !isDirectHitRadio
-      })
-    }
-    // shift选区未设置光标：重新定位光标代理并聚焦，避免键盘事件丢失
-    if (isShiftSelection) {
-      draw.getCursor().drawCursor({
-        isShow: false
-      })
-    }
-    // 首字需定位到行首，非上一行最后一个字后
-    if (hitLineStartIndex && !isShiftSelection) {
-      host.getDraw().getCursor().drawCursor({
-        hitLineStartIndex
-      })
+      // shift选区未设置光标：重新定位光标代理并聚焦，避免键盘事件丢失
+      if (isShiftSelection) {
+        draw.getCursor().drawCursor({
+          isShow: false
+        })
+      }
+      // 首字需定位到行首，非上一行最后一个字后
+      if (hitLineStartIndex && !isShiftSelection) {
+        host.getDraw().getCursor().drawCursor({
+          hitLineStartIndex
+        })
+      }
     }
   }
   // 标签点击事件
@@ -307,7 +350,17 @@ export function mousedown(evt: MouseEvent, host: CanvasEvent) {
       isShow: false
     })
     // 点击图片允许拖拽调整位置
-    setRangeCache(host)
+    // 需求 4.1：控件内图片（imageControl）禁止原生拖拽移动，
+    // 避免把图片移出/移除控件导致控件值损坏、后续命中错位
+    const isImageControlElement = !!(
+      curElement.controlId &&
+      draw
+        .getControl()
+        .getValueById({ id: curElement.controlId })?.[0]?.imageControl
+    )
+    if (!isImageControlElement) {
+      setRangeCache(host)
+    }
     // 浮动元素创建镜像图片
     if (
       curElement.imgDisplay === ImageDisplay.SURROUND ||
@@ -323,6 +376,8 @@ export function mousedown(evt: MouseEvent, host: CanvasEvent) {
         element: curElement
       })
     }
+    // 需求 4.1：控件内图片拖拽排序（只读/表单模式）
+    setupControlImageSortDrag(host, curElement)
   }
   // 表格工具组件
   const tableTool = draw.getTableTool()

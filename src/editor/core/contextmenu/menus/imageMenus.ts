@@ -25,8 +25,10 @@ export const imageMenus: IRegisterContextMenu[] = [
     i18nPath: 'contextmenu.image.change',
     icon: 'image-change',
     when: payload => {
+      // 需求 13：表单/只读模式下不显示「更改图片」
       return (
         !payload.isReadonly &&
+        !payload.isFormMode &&
         !payload.editorHasSelection &&
         payload.startElement?.type === ElementType.IMAGE
       )
@@ -54,7 +56,10 @@ export const imageMenus: IRegisterContextMenu[] = [
     i18nPath: 'contextmenu.image.saveAs',
     icon: 'image',
     when: payload => {
+      // 需求 13：表单/只读模式下不显示「另存为图片」
       return (
+        !payload.isReadonly &&
+        !payload.isFormMode &&
         !payload.editorHasSelection &&
         payload.startElement?.type === ElementType.IMAGE
       )
@@ -67,8 +72,10 @@ export const imageMenus: IRegisterContextMenu[] = [
     key: TEXT_WRAP,
     i18nPath: 'contextmenu.image.textWrap',
     when: payload => {
+      // 需求 13：表单/只读模式下不显示「文字环绕」
       return (
         !payload.isReadonly &&
+        !payload.isFormMode &&
         !payload.editorHasSelection &&
         payload.startElement?.type === ElementType.IMAGE
       )
@@ -130,5 +137,28 @@ export const imageMenus: IRegisterContextMenu[] = [
         }
       }
     ]
+  },
+  {
+    // 需求 4.2：只读/表单模式下删除图片控件内的图片（canDelete/imageCanDelete 控制）
+    key: 'imageControlDelete',
+    name: '删除图片',
+    when: payload => {
+      const el = payload.startElement
+      if (!el || el.type !== ElementType.IMAGE || !el.controlId) return false
+      if (!payload.isReadonly && !payload.isFormMode) return false
+      // 控件级 imageCanDelete 优先（图片级 canDelete 会被 formatElementList 剥离），默认不可删
+      if (payload.imageCanDelete !== undefined) return payload.imageCanDelete
+      if (el.canDelete !== undefined) return el.canDelete
+      return false
+    },
+    callback: (command: Command, context: IContextMenuContext) => {
+      const el = context.startElement
+      if (!el?.controlId) return
+      command.executeDeleteControlImage({
+        controlId: el.controlId,
+        elementIndex: context.startIndex,
+        deletedImageValue: el.value ?? ''
+      })
+    }
   }
 ]

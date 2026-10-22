@@ -10,7 +10,8 @@ export default tseslint.config(
       'lib/**',
       'index.html',
       'docs/.vitepress/cache/**',
-      'docs/.vitepress/dist/**'
+      'docs/.vitepress/dist/**',
+      'src/plugins/docx/**'
     ]
   },
   js.configs.recommended,

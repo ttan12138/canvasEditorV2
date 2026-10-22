@@ -1,4 +1,5 @@
 import type { Command, IElement } from '../editor'
+import type { IControl } from '../editor/interface/Control'
 import type { ITableCellInfo } from '../editor/interface/table/Td'
 import type { IPadding } from '../editor/interface/Common'
 import {
@@ -54,6 +55,10 @@ export interface IReplaceControlPayload {
   isImage?: boolean
   /** 图片按单元格均分时的数量 */
   count?: number
+  /** 需求 4.1：控件内图片是否支持拖拽调整顺序 */
+  draggable?: boolean
+  /** 需求 4.2：整组图片是否支持右键删除（作为 values 各项 canDelete 的默认值） */
+  canDelete?: boolean
 }
 
 /** 需求 8.5：更新子表数据 */
@@ -328,6 +333,7 @@ export async function setControlValueByPlaceholder(
     width?: number
     height?: number
     padding?: [number, number]
+    canDelete?: boolean
   }[] = []
   if (valueType === 'IMAGE') {
     // IMAGE：优先用 values 中的图片项；否则用单个 value
@@ -339,7 +345,9 @@ export async function setControlValueByPlaceholder(
         value: v.value ?? '',
         width: v.width,
         height: v.height,
-        padding: v.padding
+        padding: v.padding,
+        // 需求 4.2：图片级删除配置；顶层 payload.canDelete 作为整组默认值
+        canDelete: v.canDelete ?? payload.canDelete
       }))
     } else if (payload.value != null) {
       imageItems = [{ value: payload.value }]
@@ -442,8 +450,138 @@ export async function setControlValueByPlaceholder(
       if (item.padding) {
         el.padding = [0, padRight, 0, padLeft]
       }
+      // 需求 4.2：图片级删除配置
+      if (item.canDelete !== undefined) el.canDelete = item.canDelete
       return el
     })
     command.executeSetControlValue({ id, value: elements })
+    // 需求 4/12：标记图片控件并写入拖拽配置（draggable 为控件级）
+    command.executeSetControlProperties({
+      id,
+      properties: {
+        imageControl: true,
+        ...(payload.draggable === undefined
+          ? {}
+          : { imageDraggable: payload.draggable }),
+        // 需求 4.2/12：canDelete 写为控件级 imageCanDelete（图片级 canDelete 会被
+        // formatElementList 的白名单剥离，控件级属性保存在 control 对象中可保留）
+        ...(payload.canDelete === undefined
+          ? {}
+          : { imageCanDelete: payload.canDelete })
+      }
+    })
   }
+}
+
+/** 查找占位符匹配的控件 id 列表 */
+function findControlIdsByPlaceholder(
+  command: Command,
+  name: string
+): string[] {
+  const list = command.getControlList()
+  const ids = Array.from(
+    new Set(list.map(e => e.controlId).filter((v): v is string => !!v))
+  )
+  const result: string[] = []
+  for (const id of ids) {
+    const values = command.getControlValue({ id })
+    if (!values) continue
+    if (values.some(item => item.placeholder === name)) result.push(id)
+  }
+  return result
+}
+
+/** 判断控件是否为图片控件（显式标记，或值元素全部为图片） */
+function isImageControlValues(
+  values: NonNullable<ReturnType<Command['getControlValue']>>
+): boolean {
+  if (values.some(v => v.imageControl)) return true
+  const elementLists = values.map(v => v.elementList ?? [])
+  if (!elementLists.some(list => list.length > 0)) return false
+  return elementLists.every(
+    list =>
+      list.length === 0 || list.every(el => el.type === ElementType.IMAGE)
+  )
+}
+
+function findImageControlIds(command: Command): string[] {
+  const list = command.getControlList()
+  const ids = Array.from(
+    new Set(list.map(e => e.controlId).filter((v): v is string => !!v))
+  )
+  const result: string[] = []
+  for (const id of ids) {
+    const values = command.getControlValue({ id })
+    if (!values?.length) continue
+    if (isImageControlValues(values)) result.push(id)
+  }
+  return result
+}
+
+function applyImageControlConfig(
+  command: Command,
+  ids: string[],
+  config: IImageControlConfig
+): number {
+  const properties: Partial<IControl> = {}
+  if (config.canDelete !== undefined) {
+    properties.imageCanDelete = config.canDelete
+  }
+  if (config.draggable !== undefined) {
+    properties.imageDraggable = config.draggable
+  }
+  if (!Object.keys(properties).length) return 0
+  for (const id of ids) {
+    command.executeSetControlProperties({ id, properties })
+  }
+  return ids.length
+}
+
+/**
+ * 需求 11：表单模式下按占位符设置控件可编辑/不可编辑
+ * @returns 命中的控件数量
+ */
+export function setControlEditableByPlaceholder(
+  command: Command,
+  name: string,
+  editable: boolean
+): number {
+  const ids = findControlIdsByPlaceholder(command, name)
+  for (const id of ids) {
+    command.executeSetControlProperties({ id, properties: { editable } })
+  }
+  return ids.length
+}
+
+/** 需求 12：图片控件删除/拖拽能力配置 */
+export interface IImageControlConfig {
+  /** 是否支持右键删除控件内图片 */
+  canDelete?: boolean
+  /** 是否支持拖拽调整图片顺序 */
+  draggable?: boolean
+}
+
+/**
+ * 需求 12.1：统一设置所有图片控件的删除/拖拽能力
+ * @returns 命中的图片控件数量
+ */
+export function setImageControlConfigForAll(
+  command: Command,
+  config: IImageControlConfig
+): number {
+  return applyImageControlConfig(command, findImageControlIds(command), config)
+}
+
+/**
+ * 需求 12.2：按占位符单独设置图片控件的删除/拖拽能力（非图片控件无效果）
+ * @returns 命中的图片控件数量
+ */
+export function setImageControlConfigByPlaceholder(
+  command: Command,
+  name: string,
+  config: IImageControlConfig
+): number {
+  const nameIds = new Set(findControlIdsByPlaceholder(command, name))
+  const ids = findImageControlIds(command).filter(id => nameIds.has(id))
+  return applyImageControlConfig(command, ids, config)
 }

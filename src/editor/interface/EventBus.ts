@@ -2,6 +2,7 @@ import {
   IContentChange,
   IControlChange,
   IControlContentChange,
+  IControlImageDeleteChange,
   IImageDblclick,
   IImageMousedown,
   IImageSizeChange,
@@ -53,4 +54,6 @@ export interface EventBusMap {
   cellPlaceholderClick: (payload: { tdId: string }) => void
   /** 需求 8.4：联动「拾取模式」下点击表格单元格时触发，由宿主用于设置联动关系 */
   cellPick: (payload: { tdId: string }) => void
+  /** 需求 4.2：只读/表单模式下删除图片控件内图片后触发 */
+  controlImageDelete: IControlImageDeleteChange
 }

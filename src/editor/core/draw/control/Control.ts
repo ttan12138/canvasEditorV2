@@ -282,6 +282,13 @@ export class Control {
 
   public getIsDisabledControl(context: IControlContext = {}): boolean {
     if (this.draw.isDesignMode() || !this.activeControl) return false
+    // 需求 11：表单模式下 editable === false 的控件视为不可编辑
+    if (
+      this.draw.getMode() === EditorMode.FORM &&
+      this.activeControl.getElement()?.control?.editable === false
+    ) {
+      return true
+    }
     const { startIndex, endIndex } = context.range || this.range.getRange()
     if (startIndex === endIndex && ~startIndex && ~endIndex) {
       const elementList = context.elementList || this.getElementList()
@@ -579,6 +586,13 @@ export class Control {
     // 激活控件
     const isReadonly = this.draw.isReadonly()
     if (isReadonly) return
+    // 需求 11：表单模式下 editable === false 的控件不可聚焦（点击不激活控件）
+    if (
+      this.draw.getMode() === EditorMode.FORM &&
+      element.control?.editable === false
+    ) {
+      return
+    }
     const control = element.control!
     if (control.type === ControlType.TEXT) {
       this.activeControl = new TextControl(element, this)

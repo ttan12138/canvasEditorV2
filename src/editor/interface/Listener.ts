@@ -3,7 +3,7 @@ import { ElementType } from '../dataset/enum/Element'
 import { ListStyle, ListType } from '../dataset/enum/List'
 import { RowFlex } from '../dataset/enum/Row'
 import { TitleLevel } from '../dataset/enum/Title'
-import { IControlChangeResult, IControlContentChangeResult } from './Control'
+import { IControl, IControlChangeResult, IControlContentChangeResult } from './Control'
 import { IEditorResult } from './Editor'
 import { IElement } from './Element'
 import { IPositionContext } from './Position'
@@ -93,3 +93,17 @@ export type ILabelMousedown = (payload: {
 }) => void
 
 export type IRangeChange = (payload: IRange) => void
+
+/** 需求 4.2：控件内图片删除后的通知载荷 */
+export interface IControlImageDelete {
+  /** 正在操作的控件占位符 */
+  placeholder: string
+  /** 当前删除的图像的 base64 */
+  deletedImageValue: string
+  /** 删除之后的控件的结构 */
+  control: IControl
+  /** 删除当前图像之后的控件的值 */
+  values: IElement[]
+}
+
+export type IControlImageDeleteChange = (payload: IControlImageDelete) => void

@@ -155,6 +155,10 @@ export interface IDateElement {
 export interface IImageRule {
   imgToolDisabled?: boolean
   imgPreviewDisabled?: boolean
+  /** 需求 4.2/12：图片是否可通过右键菜单删除（控件内图片，只读/表单模式） */
+  canDelete?: boolean
+  /** 需求 4.1/12：图片是否支持拖拽调整顺序（控件内图片，只读/表单模式） */
+  draggable?: boolean
 }
 
 export interface IImageCrop {

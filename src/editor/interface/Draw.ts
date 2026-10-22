@@ -93,6 +93,8 @@ export interface IComputeRowListPayload {
   isPagingMode?: boolean
   pageHeight?: number
   surroundElementList?: IElement[]
+  /** 是否为正文主体（main）布局，用于区分页眉/页脚区域 */
+  isMainBody?: boolean
   /** 需求 8.4：全局联动子单元格集合（跨嵌套表格），由外层一次性计算后向下透传 */
   linkTargetIds?: Set<string>
   /**

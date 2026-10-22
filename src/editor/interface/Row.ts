@@ -36,6 +36,8 @@ export interface IRow {
   isSurround?: boolean
   columnIndex?: number
   tableFragment?: ITableRowFragment
+  // 正文首个内容为表格时的固定上移量（消除与页眉间隙），单位为像素
+  anchorTopOffset?: number
   // 片段行的位置信息（由位置计算阶段回填）
   fragmentPosition?: IElementPosition
   // 续页回显表头单元格的一次性位置列表（仅用于绘制，不参与命中）

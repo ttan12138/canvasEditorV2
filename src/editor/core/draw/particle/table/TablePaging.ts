@@ -440,6 +440,8 @@ export class TablePaging {
           // 片段底部留白同样使用可配置的块间距（非首片段 offsetY 已为 0，仅底部生效）
           height: fragHeight + this.draw.getTableBlockMargin(element),
           offsetY: isFirstFragment ? row.offsetY : 0,
+          // 正文首表格固定上移量仅在首片段生效，避免后续页片段重叠页眉
+          anchorTopOffset: isFirstFragment ? row.anchorTopOffset : undefined,
           // 列表标记仅在首片段绘制
           isList: isFirstFragment ? row.isList : false,
           // 分栏布局下片段落位到对应栏
