@@ -16,6 +16,9 @@ export {
   useCanvasEditor,
   getPlaceholderTextControls,
   setControlValueByPlaceholder,
+  setControlEditableByPlaceholder,
+  setImageControlConfigForAll,
+  setImageControlConfigByPlaceholder,
   EDITOR_EVENTS
 } from './vue'
 export type {

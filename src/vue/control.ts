@@ -2,12 +2,7 @@ import type { Command, IElement } from '../editor'
 import type { IControl } from '../editor/interface/Control'
 import type { ITableCellInfo } from '../editor/interface/table/Td'
 import type { IPadding } from '../editor/interface/Common'
-import {
-  ControlType,
-  ElementType,
-  VerticalAlign,
-  TdBorder
-} from '../editor'
+import { ControlType, ElementType, VerticalAlign, TdBorder } from '../editor'
 
 export type { ITableCellInfo }
 
@@ -237,7 +232,17 @@ function computeImageSize(input: IImageSizeInput): {
   width: number
   height: number
 } {
-  const { w0, h0, setW, setH, inCell, cellWidth, count, padLeft = 0, padRight = 0 } = input
+  const {
+    w0,
+    h0,
+    setW,
+    setH,
+    inCell,
+    cellWidth,
+    count,
+    padLeft = 0,
+    padRight = 0
+  } = input
   const ratio = w0 && h0 ? h0 / w0 : 1 // 原图高/宽
   const autoHeight = (w: number) => (w0 ? w * ratio : w)
   const autoWidth = (h: number) => (h0 ? h / ratio : h)
@@ -474,10 +479,7 @@ export async function setControlValueByPlaceholder(
 }
 
 /** 查找占位符匹配的控件 id 列表 */
-function findControlIdsByPlaceholder(
-  command: Command,
-  name: string
-): string[] {
+function findControlIdsByPlaceholder(command: Command, name: string): string[] {
   const list = command.getControlList()
   const ids = Array.from(
     new Set(list.map(e => e.controlId).filter((v): v is string => !!v))
@@ -499,8 +501,7 @@ function isImageControlValues(
   const elementLists = values.map(v => v.elementList ?? [])
   if (!elementLists.some(list => list.length > 0)) return false
   return elementLists.every(
-    list =>
-      list.length === 0 || list.every(el => el.type === ElementType.IMAGE)
+    list => list.length === 0 || list.every(el => el.type === ElementType.IMAGE)
   )
 }
 
@@ -539,14 +540,16 @@ function applyImageControlConfig(
 
 /**
  * 需求 11：表单模式下按占位符设置控件可编辑/不可编辑
+ * @param name 占位符名称，支持单个字符串或字符串数组（多个占位符的并集）
  * @returns 命中的控件数量
  */
 export function setControlEditableByPlaceholder(
   command: Command,
-  name: string,
+  name: string | string[],
   editable: boolean
 ): number {
-  const ids = findControlIdsByPlaceholder(command, name)
+  const names = Array.isArray(name) ? name : [name]
+  const ids = names.flatMap(n => findControlIdsByPlaceholder(command, n))
   for (const id of ids) {
     command.executeSetControlProperties({ id, properties: { editable } })
   }
@@ -574,14 +577,18 @@ export function setImageControlConfigForAll(
 
 /**
  * 需求 12.2：按占位符单独设置图片控件的删除/拖拽能力（非图片控件无效果）
+ * @param name 占位符名称，支持单个字符串或字符串数组（多个占位符的并集）
  * @returns 命中的图片控件数量
  */
 export function setImageControlConfigByPlaceholder(
   command: Command,
-  name: string,
+  name: string | string[],
   config: IImageControlConfig
 ): number {
-  const nameIds = new Set(findControlIdsByPlaceholder(command, name))
+  const names = Array.isArray(name) ? name : [name]
+  const nameIds = new Set(
+    names.flatMap(n => findControlIdsByPlaceholder(command, n))
+  )
   const ids = findImageControlIds(command).filter(id => nameIds.has(id))
   return applyImageControlConfig(command, ids, config)
 }
