@@ -113,9 +113,15 @@ function dblclick(host: CanvasEvent, evt: MouseEvent) {
   })
   if (positionContext.isImage && positionContext.isDirectHit) {
     // 双击图片事件
+    // 将本次命中的位置上下文写回，使 getElementList 解析到正确的元素列表
+    // （表格单元格 / 页眉 / 页脚 / 正文），否则按存储的「正文」上下文取列表会因
+    // 索引越界得到 undefined，进而读取 imgPreviewDisabled 报错（见需求 4 调试场景）
+    position.setPositionContext({ ...positionContext, isTable: !!positionContext.isTable })
     const elementList = draw.getElementList()
     const eventBus = draw.getEventBus()
     const curElement = elementList[positionContext.index]
+    // 命中位置不在当前元素列表（如页眉/页脚图片且未切换 zone）时安全跳过，避免崩溃
+    if (!curElement) return
     if (eventBus.isSubscribe('imageDblclick')) {
       eventBus.emit('imageDblclick', {
         evt,

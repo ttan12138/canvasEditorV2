@@ -16,7 +16,15 @@ export default defineConfig(({ mode }) => {
           './node_modules/@cspell/dict-en_us/en_US.trie.gz',
           import.meta.url
         )
-      )}?url`
+      )}?url`,
+      // 主包自引用别名：src/plugins/docx/docx.js（由 canvasEditorPluginV2 构建拷入）
+      // 以 `import ... from '@hufe921/canvas-editor'` 依赖主包（外部写法）。当本工程把
+      // docx.js 打进 canvas-editor.js 时，该裸 import 需解析到本地源码并内联，否则产物
+      // 会残留裸 import，导致宿主（cvnet）webpack 报 "Can't resolve '@hufe921/canvas-editor'"。
+      // 别名指向本地入口即可内联，且不影响插件工程自身的外部化构建。
+      '@hufe921/canvas-editor': fileURLToPath(
+        new URL('./src/index.ts', import.meta.url)
+      )
     }
   }
   const test = {
@@ -69,13 +77,17 @@ export default defineConfig(({ mode }) => {
         lib: {
           name,
           fileName: name,
-          entry: path.resolve(__dirname, 'src/index.ts')
+          entry: path.resolve(__dirname, 'src/index.ts'),
+          // 仅产出 ESM。cvnet 通过 webpack 的 import 消费本地 canvas-editor.js，
+          // 不需要 UMD；去掉后避免生成多余的 self-contained umd 文件。
+          formats: ['es']
         },
         rollupOptions: {
           // Vue 组件层外置 vue，由宿主项目（cvnet 自带 vue 3.3.6）提供
           external: ['vue']
         },
-        sourcemap: true
+        // 移除打包的 sourceMap 文件
+        sourcemap: false
       }
     }
   }

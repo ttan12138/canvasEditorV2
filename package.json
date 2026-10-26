@@ -16,16 +16,14 @@
     "package.json"
   ],
   "typings": "./lib/types/src/editor/index.d.ts",
-  "main": "./lib/canvas-editor.umd.cjs",
+  "main": "./lib/canvas-editor.js",
   "module": "./lib/canvas-editor.js",
   "exports": {
     ".": {
       "types": "./lib/types/src/editor/index.d.ts",
-      "import": "./lib/canvas-editor.js",
-      "require": "./lib/canvas-editor.umd.cjs"
+      "import": "./lib/canvas-editor.js"
     },
     "./vue": {
-      "types": "./dist/src/vue/index.d.ts",
       "import": "./dist/canvas-editor-vue.js"
     }
   },
@@ -57,7 +55,7 @@
     "dev:vue": "vite --open /vue.html",
     "lib": "eslint . && tsc && vite build --mode lib",
     "lib:copy": "eslint . && tsc && vite build --mode lib && node scripts/copy-lib.mjs",
-    "lib:vue": "eslint . && tsc --noEmit && vite build --mode vue",
+    "lib:vue": "eslint . && tsc --noEmit && vite build --mode vue && node scripts/clean-vue-dist.mjs",
     "build": "eslint . && tsc && vitest run && vite build --mode app",
     "serve": "vite preview",
     "lint": "eslint . && tsc --noEmit && vitest run",
@@ -92,7 +90,7 @@
     "tslib": "^2.8.1",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.71.1",
-    "vite": "^8.3.3",
+    "vite": "^8.3.5",
     "vite-plugin-css-injected-by-js": "^5.0.1",
     "vitepress": "^1.6.4",
     "vitest": "^4.1.11",

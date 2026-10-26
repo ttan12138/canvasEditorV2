@@ -153,6 +153,34 @@ new Dialog({
 13. 右键图像元素时，表单模式和只读模式的右键菜单不能显示【另存为图片】、【更改图片】、【文字环绕】
 
 
+（暂不做）14. 单元格增加一个新的属性 otherCustomParams:{} 任意自定义属性
+  14.1 子表格的设置页面增加下述内容
+   14.1.1 一个开关： 是否开启sql快捷查询,设置到otherCustomParams.enableChildSQL:boolean
+    14.1.1.1 true时：
+      14.1.1.1.1 增加一个输入框 支持设置sql模版字符串，其中`${取值字段}`被定义为模版语法，
+          此外需要支持 最终设置的sql语句需要校验不能为危险sql(只能是查询语句)，需要提供一部分快捷sql关键词，
+          语句结果设置到otherCustomParams.childSQLTemplate: string
+      14.1.1.1.2 增加一个两列表格
+          支持配置 子表中的key、表字段的模版字符串 (模版形如 `${表字段1}+${表字段2}`  或者"${表字段3}")
+          设置到otherCustomParams.childSQLResultMaps
+（暂不做）15. canvasEditor支持以下接口
+  15.1 设置SQLData，json键值对，记录当前报告的数据；
+  15.2 一个异步的async方法
+   入参： sql执行方法（异步的async）sqlFn
+   功能： 加载所有当前单元格的数据
+   逻辑： 是否有otherCustomParams.childSQL，如果没有就跳过这个单元格；如果有，则调用 sqlFn
+   sqlFn的参数1为 取otherCustomParams.childSQLTemplate 查找其中的所有取值字段，用SQLData[取值字段]替换得到一个sql语句
+   当sqlFn响应时，根据响应的数据，替换模版字符串，设置当前子表格的数据，并渲染
+
+  sqlFn：
+   入参：
+     参数1： sql语句
+    响应: [{
+      "表字段1"：值1，
+      "表字段2"：值2，
+    }]
+
+
 
 
 

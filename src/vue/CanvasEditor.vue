@@ -1,15 +1,16 @@
 <script setup lang="ts">
-import { computed, provide, ref } from 'vue'
+import { computed, provide, ref, useSlots, watch } from 'vue'
 import type {
-  EditorMode,
   IEditorData,
   IEditorOption,
   IElement,
   IRegisterContextMenu
 } from '../editor'
+import { EditorMode } from '../editor'
 import type { IPositionContext } from '../editor/interface/Position'
 import { EDITOR_CONTEXT_KEY, type EditorContext, type ICellConfigApi } from './context'
 import EditorDebug from './EditorDebug.vue'
+import EditorToolbar from './EditorToolbar.vue'
 import {
   getPlaceholderTextControls,
   setControlValueByPlaceholder,
@@ -37,6 +38,8 @@ const props = withDefaults(
     autoFocus?: boolean
     /** 是否渲染内置调试面板（打印实例/打印Value/加载Value），默认关闭 */
     debug?: boolean
+    /** 编辑器模式：edit / form / readonly 等（见 EditorMode），未传则由插槽控制 */
+    mode?: EditorMode
   }>(),
   {
     options: () => ({}),
@@ -57,6 +60,22 @@ const { editor, rangeStyle, pageInfo, isReady, onReady, setValue, destroy } =
     syncData: () => props.syncData,
     emit: emit as unknown as (event: string, ...args: unknown[]) => void
   })
+
+// mode prop 变化时同步引擎模式（编辑器就绪后的首次同步也在此触发）
+watch(
+  [() => props.mode, isReady],
+  ([m, ready]) => {
+    if (m && ready) editor.value?.command.executeMode(m)
+  }
+)
+
+const slots = useSlots()
+// 工具栏渲染开关：未传 mode 时保持旧行为（有插槽即渲染）；
+// 传入 mode 时 edit 显示（插槽或内置完整版）、form 显示内置精简版、readonly 不显示
+const showToolbar = computed(() => {
+  if (!props.mode) return !!slots.toolbar
+  return props.mode !== EditorMode.READONLY
+})
 
 if (props.autoFocus) {
   onReady(instance => instance.command.executeFocus())
@@ -121,11 +140,14 @@ defineExpose({
 
 <template>
   <div class="canvas-editor">
-    <slot name="toolbar" :command="command" :range-style="rangeStyle" :page-info="pageInfo" />
+    <slot v-if="showToolbar && (!mode || mode === EditorMode.EDIT)" name="toolbar" :command="command"
+      :range-style="rangeStyle" :page-info="pageInfo" />
+    <EditorToolbar v-if="mode === EditorMode.EDIT && !$slots.toolbar" />
+    <EditorToolbar v-if="mode === EditorMode.FORM" simplified />
     <div class="canvas-editor__body">
       <div ref="containerRef" class="canvas-editor__container" v-bind="$attrs" />
       <!-- 右栏：默认插槽（对话框/浮层类子组件）与内置调试面板，均通过 useEditorContext 注入编辑器实例 -->
-      <div class="canvas-editor__aside" v-if="$slots.default || debug">
+      <div class="canvas-editor__aside" v-if="mode !== EditorMode.READONLY && ($slots.default || debug)">
         <slot />
         <EditorDebug v-if="debug" />
       </div>

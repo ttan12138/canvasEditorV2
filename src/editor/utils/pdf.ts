@@ -52,9 +52,13 @@ export function buildPdfDocument(
   return doc
 }
 
-// 返回 data URI（含 base64 编码的 PDF）：data:application/pdf;base64,xxxx
+// 返回 data URI（含 base64 编码的 PDF）：data:application/pdf;charset=utf-8;base64,xxxx
 export function pdfToBase64(doc: jsPDF): string {
-  return doc.output('datauristring')
+  // jsPDF 的 datauristring 形如 data:application/pdf;filename=generated.pdf;base64,<data>
+  // 取最后一个逗号后的 base64 内容，重新拼成指定格式的 data URI
+  const datauri = doc.output('datauristring')
+  const base64 = datauri.slice(datauri.lastIndexOf(',') + 1)
+  return `data:application/pdf;charset=utf-8;base64,${base64}`
 }
 
 // 返回 PDF 的 Blob，配合 URL.createObjectURL 可实现极速下载/预览，避免大段 base64 占用内存

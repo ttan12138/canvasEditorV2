@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useEditorContext } from './context'
 import { ElementType, EditorMode, ControlType } from '../editor'
 import type { IElement, IEditorData } from '../editor'
+import { options as mockOptions, buildDemoEditorData } from '../mock'
 import {
   getPlaceholderTextControls,
   setControlValueByPlaceholder,
@@ -45,33 +46,59 @@ const printValue = () => {
   console.log('[debug] value', value)
   resultText.value = '已打印 value 到控制台'
 }
-// 载入当前 value 到文本框
-const loadCurrent = () => {
-  const value = cmd()?.getValue()
-  valueText.value = JSON.stringify(value, null, 2)
-  resultText.value = '已载入当前 value 到文本框'
-}
-// 3. 加载 value（文本框 JSON → 编辑器）
+// 下载当前 value 为 JSON 文件（同时回显到文本框便于查看）
 const valueText = ref('')
 const status = ref('')
-const loadValue = () => {
+const downloadValue = () => {
+  const value = cmd()?.getValue()
+  if (!value) {
+    resultText.value = '编辑器未就绪，无法下载'
+    return
+  }
+  const json = JSON.stringify(value, null, 2)
+  valueText.value = json
+  const blob = new Blob([json], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'canvas-editor-value.json'
+  a.click()
+  URL.revokeObjectURL(url)
+  resultText.value = '已下载当前 Value JSON 文件'
+}
+// 通过 JSON 文件加载 value 到编辑器
+const fileInput = ref<HTMLInputElement | null>(null)
+const triggerLoadFile = () => fileInput.value?.click()
+const onFileChange = (e: Event) => {
+  readFileValue(e.target as HTMLInputElement)
+}
+const readFileValue = (input: HTMLInputElement) => {
+  const file = input.files?.[0]
+  input.value = '' // 允许重复选择同一文件
+  if (!file) return
   const command = cmd()
   if (!command) {
     status.value = '编辑器未就绪'
     return
   }
-  const text = valueText.value.trim()
-  if (!text) {
-    status.value = '文本框为空，无可加载内容'
-    return
+  const reader = new FileReader()
+  reader.onload = () => {
+    try {
+      const parsed = JSON.parse(String(reader.result))
+      // getValue() 返回 { version, data: IEditorData, options }，executeSetValue 需要其 data 部分；
+      // 兼容文件直接是 IEditorData（顶层含 header/main/footer）的情况
+      const payload = (parsed && parsed.data) ? parsed.data : parsed
+      command.executeSetValue(payload)
+      command.executeUpdateOptions(parsed?.options || {})
+      status.value = '已从文件「' + file.name + '」加载 Value'
+    } catch (e) {
+      status.value = 'JSON 解析失败：' + (e as Error).message
+    }
   }
-  try {
-    const data = JSON.parse(text)
-    command.executeSetValue(data)
-    status.value = '已加载 Value 到编辑器'
-  } catch (e) {
-    status.value = `JSON 解析失败：${(e as Error).message}`
+  reader.onerror = () => {
+    status.value = '文件读取失败'
   }
+  reader.readAsText(file)
 }
 
 // ============ 加载 Mock 数据 ============
@@ -137,6 +164,17 @@ const loadMockData = () => {
   command.executeSetValue(buildMockData())
   mockStatus.value = '已加载 Mock 数据（含文本/控件/表格）'
 }
+// 加载 src/mock.ts 的全套示例（含页眉/页脚、subTableDemo 子表联动单元格、控件/图片/级联/计算/批注）
+const loadMockData2 = () => {
+  const command = cmd()
+  if (!command) {
+    mockStatus.value = '编辑器未就绪'
+    return
+  }
+  command.executeSetValue(buildDemoEditorData())
+  command.executeUpdateOptions(mockOptions)
+  mockStatus.value = '已加载 Mock 数据2（src/mock.ts：页眉/正文/页脚 + subTableDemo 子表联动 + 控件/图片/级联/计算/批注）'
+}
 
 // ============ 需求 3：获取所有带 placeholder 的文本控件值 ============
 const listPlaceholderControls = () => {
@@ -191,6 +229,8 @@ const replaceImageByPlaceholder = (
     height?: number
     count?: number
     values?: IReplaceValueDetail[]
+    draggable?: boolean
+    canDelete?: boolean
   } = {}
 ) => {
   const command = cmd()
@@ -394,21 +434,32 @@ const setImageConfig = (name: string, config: IImageControlConfig) => {
       <details open>
         <summary>调试：实例 / Value</summary>
         <div class="editor-debug__row">
-          <button type="button" @click="printInstance">1. 打印实例</button>
-          <button type="button" @click="printValue">2. 打印 Value</button>
-          <button type="button" @click="loadCurrent">载入当前 Value</button>
-          <button type="button" class="is-primary" @click="loadValue">3. 加载 Value</button>
-          <button type="button" @click="loadMockData">加载 Mock 数据</button>
+          <button type="button" title="ctx.getInstance() → 返回编辑器实例对象（含 version）" @click="printInstance">1. 打印实例</button>
+          <button type="button" title="command.getValue() → 返回 IEditorResult：{ version, data: IEditorData, options }"
+            @click="printValue">2. 打印 Value</button>
+          <button type="button" title="command.getValue() → 导出 canvas-editor-value.json（IEditorResult）"
+            @click="downloadValue">下载 JSON</button>
+          <button type="button" class="is-primary"
+            title="command.executeSetValue(IEditorData) + executeUpdateOptions(options) → 从 JSON 文件加载（兼容顶层 {header,main,footer} 或 {data,options}）"
+            @click="triggerLoadFile">从 JSON 文件加载</button>
+          <input ref="fileInput" type="file" accept=".json,application/json" style="display: none"
+            @change="onFileChange" />
+          <button type="button" title="command.executeSetValue({ main:[文本×2, CONTROL(患者姓名/性别/年龄), 3×3表格] })"
+            @click="loadMockData">加载 Mock 数据</button>
+          <button type="button"
+            title="command.executeSetValue({ main: <mock.ts data> }) + executeUpdateOptions(<mock.ts options>) → 加载 src/mock.ts 全套示例（文本控件/下拉/级联/计算/批注/表格/图片/checkbox/日期/LaTex）"
+            @click="loadMockData2">加载 Mock 数据2</button>
           <span class="editor-debug__status">{{ status || mockStatus }}</span>
         </div>
         <textarea v-model="valueText" class="editor-debug__area" spellcheck="false"
-          placeholder="在此粘贴 IEditorData（含 header/main/footer）或元素数组 JSON，点击「加载 Value」回载到编辑器" />
+          placeholder="当前 value JSON（点击「下载 JSON」时同步显示；加载请使用「从 JSON 文件加载」按钮）" />
       </details>
 
       <details open>
         <summary>需求 3：获取所有 placeholder 控件值</summary>
         <div class="editor-debug__row">
-          <button type="button" @click="listPlaceholderControls">获取全部 placeholder 控件值</button>
+          <button type="button" title="getPlaceholderTextControls(command) → {name, value}[]（覆盖页眉/页脚/正文三区）"
+            @click="listPlaceholderControls">获取全部 placeholder 控件值</button>
           <span class="editor-debug__tip">结果见输出区（含页眉/页脚/正文三区）</span>
         </div>
       </details>
@@ -416,9 +467,15 @@ const setImageConfig = (name: string, config: IImageControlConfig) => {
       <details open>
         <summary>需求 4：按 placeholder 替换文本（VALUE）</summary>
         <div class="editor-debug__row">
-          <button type="button" @click="replaceTextByPlaceholder('其他补充', '已补充内容A')">替换『其他补充』</button>
-          <button type="button" @click="replaceTextByPlaceholder('签署日期', '2026-10-16 10:00:00')">替换『签署日期』</button>
-          <button type="button" @click="replaceValuesByPlaceholder('就诊次数')">values数组拼接替换『就诊次数』</button>
+          <button type="button"
+            title="setControlValueByPlaceholder(command, { name:'其他补充', value:'已补充内容A', valueType:'VALUE' })"
+            @click="replaceTextByPlaceholder('其他补充', '已补充内容A')">替换『其他补充』</button>
+          <button type="button"
+            title="setControlValueByPlaceholder(command, { name:'签署日期', value:'2026-10-16 10:00:00', valueType:'VALUE' })"
+            @click="replaceTextByPlaceholder('签署日期', '2026-10-16 10:00:00')">替换『签署日期』</button>
+          <button type="button"
+            title="setControlValueByPlaceholder(command, { name:'就诊次数', valueType:'VALUE', values:[{value:'甲'},{value:'乙'},{value:'丙'}] })"
+            @click="replaceValuesByPlaceholder('就诊次数')">values数组拼接替换『就诊次数』</button>
         </div>
       </details>
 
@@ -427,45 +484,62 @@ const setImageConfig = (name: string, config: IImageControlConfig) => {
         <div class="editor-debug__row">
           <span class="editor-debug__grp">5.1 单元格内（控件『单元格签名』，独占单元格）：</span>
           <button type="button"
+            title="setControlValueByPlaceholder(command, { name:'单元格签名', valueType:'IMAGE', count:2, value:<png 200x80> })"
             @click="replaceImageByPlaceholder('单元格签名', makeSampleImage(200, 80), { count: 2 })">5.1.1
             count=2（两图）</button><button type="button"
+            title="setControlValueByPlaceholder(command, { name:'单元格签名', valueType:'IMAGE', count:3, value:<png 200x80> })"
             @click="replaceImageByPlaceholder('单元格签名', makeSampleImage(200, 80), { count: 3 })">5.1.1
             count=3（三图/每行3张）</button><button type="button"
+            title="setControlValueByPlaceholder(command, { name:'单元格签名', valueType:'IMAGE', count:2, values:[3×{value:<png>,valueType:'IMAGE'}] })"
             @click="replaceImageByPlaceholder('单元格签名', '', { count: 2, values: [{ value: makeSampleImage(200, 80), valueType: 'IMAGE' }, { value: makeSampleImage(200, 80), valueType: 'IMAGE' }, { value: makeSampleImage(200, 80), valueType: 'IMAGE' }] })">5.1.1
             三图count=2（每行2张）</button>
           <button type="button"
+            title="setControlValueByPlaceholder(command, { name:'单元格签名', valueType:'IMAGE', width:400, height:160 })（超单元格宽则限宽，高按比例）"
             @click="replaceImageByPlaceholder('单元格签名', makeSampleImage(400, 160), { width: 400, height: 160 })">5.1.2
             设宽高(超宽限宽)</button>
           <button type="button"
+            title="setControlValueByPlaceholder(command, { name:'单元格签名', valueType:'IMAGE', width:250 })（超宽限宽，高比例自适应）"
             @click="replaceImageByPlaceholder('单元格签名', makeSampleImage(300, 120), { width: 250 })">5.1.3 仅设宽</button>
-          <button type="button" @click="replaceImageByPlaceholder('单元格签名', makeSampleImage(300, 140))">5.1.4
+          <button type="button"
+            title="setControlValueByPlaceholder(command, { name:'单元格签名', valueType:'IMAGE' })（宽=单元格宽，高比例自适应）"
+            @click="replaceImageByPlaceholder('单元格签名', makeSampleImage(300, 140))">5.1.4
             不设宽高</button>
           <button type="button"
+            title="setControlValueByPlaceholder(command, { name:'单元格签名', valueType:'IMAGE', count:2, values:[{padding:[10,20]},{padding:[20,20]}] })（单图宽=50%-padding）"
             @click="replaceImageByPlaceholder('单元格签名', '', { count: 2, values: [{ value: makeSampleImage(200, 80), padding: [10, 20] }, { value: makeSampleImage(200, 80), padding: [20, 20] }] })">5.3
             图片padding</button><button type="button"
+            title="setControlValueByPlaceholder(command, { name:'单元格签名', valueType:'IMAGE', count:2, values:[] })（边界：无图）"
             @click="replaceImageByPlaceholder('单元格签名', '', { values: [], count: 2 })">5.4
             空values+IMAGE(边界)</button>
         </div>
         <div class="editor-debug__row">
           <span class="editor-debug__grp">5.2 非单元格内（控件『其他补充』）：</span>
           <button type="button"
+            title="setControlValueByPlaceholder(command, { name:'其他补充', valueType:'IMAGE', width:150, height:60 })（原图宽高）"
             @click="replaceImageByPlaceholder('其他补充', makeSampleImage(200, 80), { width: 150, height: 60 })">5.2.1
             设宽高</button>
           <button type="button"
+            title="setControlValueByPlaceholder(command, { name:'其他补充', valueType:'IMAGE', width:120 })（宽固定，高比例自适应）"
             @click="replaceImageByPlaceholder('其他补充', makeSampleImage(200, 80), { width: 120 })">5.2.2
             仅设宽</button>
           <button type="button"
+            title="setControlValueByPlaceholder(command, { name:'其他补充', valueType:'IMAGE', height:40 })（高固定，宽比例自适应）"
             @click="replaceImageByPlaceholder('其他补充', makeSampleImage(200, 80), { height: 40 })">5.2.3
             仅设高</button>
-          <button type="button" @click="replaceImageByPlaceholder('其他补充', makeSampleImage(200, 80))">5.2.4 原图</button>
+          <button type="button" title="setControlValueByPlaceholder(command, { name:'其他补充', valueType:'IMAGE' })（原图宽高）"
+            @click="replaceImageByPlaceholder('其他补充', makeSampleImage(200, 80))">5.2.4 原图</button>
         </div>
       </details>
 
       <details open>
         <summary>需求 6：插入带前缀/后缀控件</summary>
         <div class="editor-debug__row">
-          <button type="button" @click="insertControlWithAffix">插入前后缀控件（【】）</button>
-          <button type="button" @click="insertControlZeroWidth">插入零宽空格前后缀控件</button>
+          <button type="button"
+            title="command.executeInsertControl({ type:CONTROL, value:'', control:{ type:'text', value:null, placeholder:'前后缀示例', prefix:'【', postfix:'】' } })"
+            @click="insertControlWithAffix">插入前后缀控件（【】）</button>
+          <button type="button"
+            title="command.executeInsertControl({ ...prefix:'\u200c', postfix:'\u200c' })（零宽空格，编辑态不占可视宽度）"
+            @click="insertControlZeroWidth">插入零宽空格前后缀控件</button>
           <span class="editor-debug__tip">编辑态定位光标后插入，验证前缀后缀默认零宽</span>
         </div>
       </details>
@@ -473,10 +547,12 @@ const setImageConfig = (name: string, config: IImageControlConfig) => {
       <details open>
         <summary>需求 7：表单模式限制 / 需求 9：只读模式</summary>
         <div class="editor-debug__row">
-          <button type="button" :class="{ 'is-active': mode === 'edit' }" @click="switchMode('edit')">编辑模式</button>
-          <button type="button" :class="{ 'is-active': mode === 'form' }" @click="switchMode('form')">表单模式</button>
+          <button type="button" :class="{ 'is-active': mode === 'edit' }" title="command.executeMode(EditorMode.EDIT)"
+            @click="switchMode('edit')">编辑模式</button>
+          <button type="button" :class="{ 'is-active': mode === 'form' }" title="command.executeMode(EditorMode.FORM)"
+            @click="switchMode('form')">表单模式</button>
           <button type="button" :class="{ 'is-active': mode === 'readonly' }"
-            @click="switchMode('readonly')">只读模式</button>
+            title="command.executeMode(EditorMode.READONLY)" @click="switchMode('readonly')">只读模式</button>
           <span class="editor-debug__tip">表单模式：不可删控件/不可改表格结构/隐藏表格右键结构项；只读模式：空控件不显占位符（见『患者签名』）</span>
         </div>
       </details>
@@ -485,14 +561,21 @@ const setImageConfig = (name: string, config: IImageControlConfig) => {
         <summary>需求 8：子表 + 联动</summary>
         <div class="editor-debug__row">
           <span class="editor-debug__grp">子表：</span>
-          <button type="button" @click="openCellConfigByName('subA')">配置子表 subA</button>
-          <button type="button" @click="writeSubTable">写入子表数据</button>
-          <button type="button" @click="clearSubTable">清空子表数据</button>
+          <button type="button" title="ctx.cellConfig.openByName('subA') → 打开『配置单元格』对话框"
+            @click="openCellConfigByName('subA')">配置子表 subA</button>
+          <button type="button" title="command.setChildTable({ name:'subA', data:[['张三',20],['李四',25]] })"
+            @click="writeSubTable">写入子表数据</button>
+          <button type="button" title="command.setChildTable({ name:'subA', data:[] })"
+            @click="clearSubTable">清空子表数据</button>
         </div>
         <div class="editor-debug__row">
           <span class="editor-debug__grp">联动：</span>
-          <button type="button" @click="linkCToSubA">建立 C→subA 联动</button>
-          <button type="button" @click="clearLinkForC">清除 C 联动</button>
+          <button type="button"
+            title="command.setCellConfig({ tdId:<label='表3 R2C1'单元格>, enableLink:true, linkChildIds:[<name='subA'单元格的tdId>] })"
+            @click="linkCToSubA">建立 C→subA 联动</button>
+          <button type="button"
+            title="command.setCellConfig({ tdId:<label='表3 R2C1'>, enableLink:true, linkChildIds:[] })"
+            @click="clearLinkForC">清除 C 联动</button>
           <span class="editor-debug__tip">联动高亮：编辑态右键单元格→拾取；表单态按显隐规则生效</span>
         </div>
       </details>
@@ -500,8 +583,11 @@ const setImageConfig = (name: string, config: IImageControlConfig) => {
       <details open>
         <summary>需求 10：页眉/页脚/正文 跨区替换</summary>
         <div class="editor-debug__row">
-          <button type="button" @click="replaceAcrossZones">统一替换三区「区域占位符」</button>
-          <button type="button" @click="listPlaceholderControls">查看三区结果</button>
+          <button type="button"
+            title="setControlValueByPlaceholder(command, { name:'区域占位符', value:'跨区已替换✔', valueType:'VALUE' })（页眉/页脚/正文统一替换）"
+            @click="replaceAcrossZones">统一替换三区「区域占位符」</button>
+          <button type="button" title="getPlaceholderTextControls(command) → {name, value}[]（覆盖页眉/页脚/正文三区）"
+            @click="listPlaceholderControls">查看三区结果</button>
         </div>
       </details>
 
@@ -509,33 +595,45 @@ const setImageConfig = (name: string, config: IImageControlConfig) => {
         <summary>需求 4.1/4.2/11/12：图片交互 / 控件编辑</summary>
         <div class="editor-debug__row">
           <span class="editor-debug__grp">4.1 拖拽排序：</span>
-          <button type="button" @click="enableImageDrag">写入 5 张可拖拽图片（单元格签名）</button>
+          <button type="button"
+            title="setControlValueByPlaceholder(command, { name:'单元格签名', valueType:'IMAGE', count:3, draggable:true, values:[5×{value:<png 200x80>,valueType:'IMAGE'}] })（只读/表单下拖拽交换顺序）"
+            @click="enableImageDrag">写入 5 张可拖拽图片（单元格签名）</button>
           <span class="editor-debug__tip">只读/表单模式下按住一张图拖到另一张上交换顺序（5 张不同颜色，count=3）</span>
         </div>
         <div class="editor-debug__row">
           <span class="editor-debug__grp">4.2 右键删除：</span>
-          <button type="button" @click="enableImageDelete">写入 2 张可删除图片（单元格签名）</button>
+          <button type="button"
+            title="setControlValueByPlaceholder(command, { name:'单元格签名', valueType:'IMAGE', count:2, canDelete:true, draggable:true, values:[2×IMAGE] }) + eventBus.on('controlImageDelete', cb)"
+            @click="enableImageDelete">写入 2 张可删除图片（单元格签名）</button>
           <span class="editor-debug__tip">只读/表单模式下右键图片→「删除图片」，通知见输出区</span>
         </div>
         <div class="editor-debug__row">
           <span class="editor-debug__grp">11 表单编辑：</span>
-          <button type="button" @click="setControlEditable('患者姓名', false)">『患者姓名』不可编辑</button>
-          <button type="button" @click="setControlEditable('患者姓名', true)">『患者姓名』可编辑</button>
+          <button type="button" title="setControlEditableByPlaceholder(command, '患者姓名', false)"
+            @click="setControlEditable('患者姓名', false)">『患者姓名』不可编辑</button>
+          <button type="button" title="setControlEditableByPlaceholder(command, '患者姓名', true)"
+            @click="setControlEditable('患者姓名', true)">『患者姓名』可编辑</button>
           <span class="editor-debug__tip">切到表单模式验证</span>
         </div>
         <div class="editor-debug__row">
           <span class="editor-debug__grp">12.1 统一设置：</span>
-          <button type="button" @click="setAllImageConfig({ canDelete: true, draggable: true })">全部图片控件：可删+可拖</button>
-          <button type="button" @click="setAllImageConfig({ canDelete: false, draggable: false })">全部图片控件：关闭</button>
+          <button type="button" title="setImageControlConfigForAll(command, { canDelete:true, draggable:true })"
+            @click="setAllImageConfig({ canDelete: true, draggable: true })">全部图片控件：可删+可拖</button>
+          <button type="button" title="setImageControlConfigForAll(command, { canDelete:false, draggable:false })"
+            @click="setAllImageConfig({ canDelete: false, draggable: false })">全部图片控件：关闭</button>
           <span class="editor-debug__tip">只读模式下对所有图片控件生效</span>
         </div>
         <div class="editor-debug__row">
           <span class="editor-debug__grp">12.2 单独设置：</span>
           <button type="button"
+            title="setImageControlConfigByPlaceholder(command, '单元格签名', { canDelete:true, draggable:true })"
             @click="setImageConfig('单元格签名', { canDelete: true, draggable: true })">『单元格签名』可删+可拖</button>
           <button type="button"
+            title="setImageControlConfigByPlaceholder(command, '单元格签名', { canDelete:false, draggable:false })"
             @click="setImageConfig('单元格签名', { canDelete: false, draggable: false })">『单元格签名』关闭</button>
-          <button type="button" @click="setImageConfig('患者姓名', { canDelete: true })">『患者姓名』（非图片控件，无效）</button>
+          <button type="button"
+            title="setImageControlConfigByPlaceholder(command, '患者姓名', { canDelete:true }) → 非图片控件，无效果"
+            @click="setImageConfig('患者姓名', { canDelete: true })">『患者姓名』（非图片控件，无效）</button>
         </div>
       </details>
 
@@ -605,39 +703,58 @@ const setImageConfig = (name: string, config: IImageControlConfig) => {
 }
 
 .editor-debug__grp {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 6px;
+  margin-right: 4px;
+  border-radius: 4px;
+  background: rgba(25, 55, 88, 0.08);
   color: #193758;
   font-weight: 600;
-  margin-right: 2px;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .editor-debug__tip {
   color: #9097a1;
+  font-size: 12px;
 }
 
+/* 按钮风格对齐 EditorToolbar.vue：无边框、hover 浅色底、active 加深 */
 .editor-debug button {
   height: 26px;
-  padding: 0 10px;
-  border: 1px solid #d0d3d9;
+  padding: 0 8px;
+  border: none;
   border-radius: 4px;
-  background: #fff;
+  background: transparent;
   color: #3d4757;
+  font-size: 13px;
   cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s ease, color 0.12s ease;
 }
 
 .editor-debug button:hover {
-  border-color: #193758;
+  background: rgba(25, 55, 88, 0.06);
+}
+
+.editor-debug button:active {
+  background: rgba(25, 55, 88, 0.12);
 }
 
 .editor-debug button.is-active {
-  border-color: #193758;
   background: rgba(25, 55, 88, 0.12);
   color: #193758;
 }
 
 .editor-debug button.is-primary {
-  border-color: #2f5d92;
   background: #193758;
   color: #fff;
+}
+
+.editor-debug button.is-primary:hover {
+  background: #234a73;
 }
 
 .editor-debug__status {

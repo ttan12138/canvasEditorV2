@@ -2,7 +2,6 @@
 import { computed, reactive, ref } from 'vue'
 import {
   CanvasEditor,
-  EditorToolbar,
   CellConfigDialog
 } from '../vue'
 import type Editor from '../editor'
@@ -140,7 +139,7 @@ const MODE_MAP: Record<DemoMode, EditorMode> = {
 const switchMode = (next: DemoMode) => {
   if (next === mode.value) return
   mode.value = next
-  editorRef.value?.setMode(MODE_MAP[next])
+  // 模式切换由 <CanvasEditor :mode> 内部同步引擎模式
 }
 
 const onReady = (editor: Editor) => {
@@ -188,11 +187,8 @@ const save = () => {
         <span class="demo__ops-tip">提示：在表格单元格上「右键」可打开「配置单元格(子表/联动)」</span>
       </div>
 
-      <CanvasEditor ref="editorRef" :data="editorData" :options="options" :debug="debug" auto-focus @ready="onReady"
-        @content-change="onContentChange" @saved="onSaved">
-        <template #toolbar>
-          <EditorToolbar v-if="mode === 'edit'" />
-        </template>
+      <CanvasEditor ref="editorRef" :data="editorData" :options="options" :mode="MODE_MAP[mode]" :debug="debug"
+        auto-focus @ready="onReady" @content-change="onContentChange" @saved="onSaved">
         <template #footer="{ pageInfo }">
           <div class="demo__footer">
             <span>页面 {{ pageInfo.pageNo }}/{{ pageInfo.pageCount }}</span>

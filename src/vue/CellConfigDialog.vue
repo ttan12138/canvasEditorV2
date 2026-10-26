@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import type Editor from '../editor'
-import { EditorMode, RowFlex, VerticalAlign, TdBorder } from '../editor'
+import { RowFlex, VerticalAlign, TdBorder } from '../editor'
 import type { IPositionContext } from '../editor/interface/Position'
 import type { ITableCellInfo, ISetCellConfigPayload } from './control'
 import { defaultTableOption } from '../editor/dataset/constant/Table'
@@ -87,8 +87,10 @@ const onReady = (editor: Editor) => {
     {
       key: 'CELL_CONFIG',
       name: '配置单元格(子表/联动)',
-      when: (c: { isInTable?: boolean; options?: { mode?: string } }) =>
-        !!c.isInTable && c.options?.mode === EditorMode.EDIT,
+      // 用上下文里实时计算的 isReadonly / isFormMode 判断编辑态，
+      // 不依赖 c.options.mode（executeMode 不会写回 options.mode，仅在初始化传入时才有效）
+      when: (c: { isInTable?: boolean; isReadonly?: boolean; isFormMode?: boolean }) =>
+        !!c.isInTable && !c.isReadonly && !c.isFormMode,
       callback: () => openCellDialog()
     }
   ])
@@ -952,5 +954,17 @@ onUnmounted(() => {
   border-color: #193758;
   background: #193758;
   color: #fff;
+}
+/* 防御宿主全局 reset 覆盖原生 checkbox */
+.cc-dialog input[type='checkbox'] {
+  display: inline-block !important;
+  width: 14px !important;
+  height: 14px !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  appearance: checkbox !important;
+  vertical-align: middle;
+  cursor: pointer;
+  accent-color: #193758;
 }
 </style>

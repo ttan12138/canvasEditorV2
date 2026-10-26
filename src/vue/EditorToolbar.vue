@@ -13,6 +13,12 @@ import { Dialog } from '../components/dialog/Dialog'
 import { useEditorContext } from './context'
 import OptionsConfigDialog from './OptionsConfigDialog.vue'
 
+// 表单模式精简工具栏：隐藏「插入占位符 / 表格」组，仅保留格式化按键与缩放区
+const props = withDefaults(
+  defineProps<{ simplified?: boolean }>(),
+  { simplified: false }
+)
+
 const ctx = useEditorContext()
 
 const rootRef = ref<HTMLDivElement | null>(null)
@@ -430,9 +436,9 @@ const onCellHover = (row: number, col: number) => {
       </div>
     </div>
 
-    <span class="ce-toolbar__divider" />
+    <span v-if="!simplified" class="ce-toolbar__divider" />
 
-    <div class="ce-toolbar__group">
+    <div v-if="!simplified" class="ce-toolbar__group">
       <button type="button" @click="insertTextControl">插入占位符</button>
       <div class="ce-toolbar__dropdown">
         <button type="button" @click="toggleDropdown('table')">表格</button>

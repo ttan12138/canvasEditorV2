@@ -4,8 +4,10 @@ import {
   IEditorOption,
   IElement,
   ListType,
+  RowFlex,
   TitleLevel
 } from './editor'
+import type { IEditorData } from './editor'
 
 const text = `主诉：\n发热三天，咳嗽五天。\n现病史：\n患者于三天前无明显诱因，感冒后发现面部水肿，无皮疹，尿量减少，出现乏力，在外治疗无好转，现来我院就诊。\n既往史：\n有糖尿病10年，有高血压2年，有传染性疾病1年。报告其他既往疾病。\n流行病史：\n否认14天内接触过确诊患者、疑似患者、无症状感染者及其密切接触者；否认14天内去过以下场所：水产、肉类批发市场，农贸市场，集市，大型超市，夜市；否认14天内与以下场所工作人员密切接触：水产、肉类批发市场，农贸市场，集市，大型超市；否认14天内周围（如家庭、办公室）有2例以上聚集性发病；否认14天内接触过有发热或呼吸道症状的人员；否认14天内自身有发热或呼吸道症状；否认14天内接触过纳入隔离观察的人员及其他可能与新冠肺炎关联的情形；陪同家属无以上情况。\n体格检查：\nT：39.5℃，P：80bpm，R：20次/分，BP：120/80mmHg；\n辅助检查：\n2020年6月10日，普放：血细胞比容36.50%（偏低）40～50；单核细胞绝对值0.75*10/L（偏高）参考值：0.1～0.6；\n门诊诊断：处置治疗：电子签名：【】\n其他记录：`
 
@@ -768,3 +770,100 @@ export const options: IEditorOption = {
   },
   maskMargin: [60, 0, 30, 0] // 菜单栏高度60，底部工具栏30为遮盖层
 }
+
+// 需求 8 示例表格：含一个子表单元格 subA（hasChild/childTables）与一个可联动单元格 C
+// （enableLink/linkChildIds），供 App.vue 与调试面板「加载 Mock 数据2」复用。
+export const subTableDemo: IElement = {
+  type: ElementType.TABLE,
+  value: '',
+  colgroup: [{ width: 220 }, { width: 220 }],
+  trList: [
+    {
+      height: 48,
+      tdList: [
+        {
+          colspan: 1,
+          rowspan: 1,
+          name: 'subA',
+          hasChild: true,
+          childTables: {
+            header: [
+              { key: 'name', name: '姓名', width: 110 },
+              { key: 'age', name: '年龄', width: 110 }
+            ],
+            rowHeight: 26
+          },
+          value: [{ value: '' }]
+        },
+        {
+          colspan: 1,
+          rowspan: 1,
+          value: [{ value: '普通单元格 B' }]
+        }
+      ]
+    },
+    {
+      height: 48,
+      tdList: [
+        {
+          colspan: 1,
+          rowspan: 1,
+          enableLink: true,
+          linkChildIds: [],
+          value: [{ value: '联动单元格 C（右击配置 → 关联 subA）' }]
+        },
+        {
+          colspan: 1,
+          rowspan: 1,
+          value: [{ value: '普通单元格 D' }]
+        }
+      ]
+    }
+  ]
+}
+
+// 构造含页眉/正文/页脚的完整示例数据（与 App.vue 一致），便于「加载 Mock 数据2」一键还原
+export const buildDemoEditorData = (): IEditorData => ({
+  header: [
+    { value: '第一人民医院', size: 32, rowFlex: RowFlex.CENTER },
+    { value: '\n门诊病历', size: 18, rowFlex: RowFlex.CENTER },
+    { value: '\n', type: ElementType.SEPARATOR },
+    {
+      value: '',
+      type: ElementType.CONTROL,
+      control: {
+        conceptId: 'hdr-ph',
+        type: ControlType.TEXT,
+        value: null,
+        placeholder: '区域占位符'
+      }
+    }
+  ],
+  main: [
+    ...data,
+    subTableDemo,
+    {
+      value: '',
+      type: ElementType.CONTROL,
+      control: {
+        conceptId: 'main-ph',
+        type: ControlType.TEXT,
+        value: null,
+        placeholder: '区域占位符'
+      }
+    }
+  ],
+  footer: [
+    { value: 'canvas-editor', size: 12 },
+    {
+      value: '',
+      type: ElementType.CONTROL,
+      control: {
+        conceptId: 'ftr-ph',
+        type: ControlType.TEXT,
+        value: null,
+        placeholder: '区域占位符'
+      }
+    }
+  ]
+})

@@ -24,15 +24,20 @@ export type { EditorEmits, EditorEventName, PageInfo } from './types'
 
 export {
   getPlaceholderTextControls,
-  setControlValueByPlaceholder
+  setControlValueByPlaceholder,
+  setControlEditableByPlaceholder,
+  setImageControlConfigForAll,
+  setImageControlConfigByPlaceholder
 } from './control'
 export type {
   IPlaceholderTextControl,
+  IReplaceValueType,
   IReplaceValueDetail,
   IReplaceControlPayload,
   ISetChildTablePayload,
   ISetCellConfigPayload,
-  ITableCellInfo
+  ITableCellInfo,
+  IImageControlConfig
 } from './control'
 
 export const CanvasEditorPlugin: Plugin = {
