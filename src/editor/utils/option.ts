@@ -30,7 +30,12 @@ import { ICheckboxOption } from '../interface/Checkbox'
 import { DeepRequired } from '../interface/Common'
 import { IControlOption } from '../interface/Control'
 import { ICursorOption } from '../interface/Cursor'
-import { IEditorOption, ILabOption, IModeRule } from '../interface/Editor'
+import {
+  IAnnotationStyle,
+  IEditorOption,
+  ILabOption,
+  IModeRule
+} from '../interface/Editor'
 import { ITraceOption } from '../interface/Trace'
 import { IRulerOption } from '../interface/Ruler'
 import { IHintOption } from '../interface/Hint'
@@ -63,7 +68,7 @@ import {
 } from '../dataset/enum/Editor'
 import { defaultBadgeOption } from '../dataset/constant/Badge'
 import { IBadgeOption } from '../interface/Badge'
-import { defaultModeRuleOption } from '../dataset/constant/Editor'
+import { defaultModeRuleOption, defaultAnnotationOption } from '../dataset/constant/Editor'
 import { IGraffitiOption } from '../interface/Graffiti'
 import { defaultGraffitiOption } from '../dataset/constant/Graffiti'
 import { IWhiteSpaceOption } from '../interface/WhiteSpace'
@@ -222,6 +227,10 @@ export function mergeOption(
       ...options.modeRule?.form
     }
   }
+  const annotationOptions: Required<IAnnotationStyle> = {
+    ...defaultAnnotationOption,
+    ...options.annotation
+  }
 
   return {
     mode: EditorMode.EDIT,
@@ -302,6 +311,7 @@ export function mergeOption(
     trace: traceOptions,
     ruler: rulerOptions,
     hint: hintOptions,
-    spellcheck: spellcheckOptions
+    spellcheck: spellcheckOptions,
+    annotation: annotationOptions
   }
 }

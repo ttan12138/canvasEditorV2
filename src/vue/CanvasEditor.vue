@@ -14,6 +14,7 @@ import EditorToolbar from './EditorToolbar.vue'
 import {
   getPlaceholderTextControls,
   setControlValueByPlaceholder,
+  setControlValuesByPlaceholder,
   type IReplaceControlPayload,
   type ISetChildTablePayload,
   type ISetCellConfigPayload,
@@ -83,6 +84,23 @@ if (props.autoFocus) {
 
 const command = computed(() => editor.value?.command ?? null)
 
+// 护眼模式：文档背景使用 #cfe8cc；文档以外的空白区域使用 #d7e7da（由根节点 .eye-care 控制）
+const EYE_CARE_DOC_BG = '#cfe8cc'
+const NORMAL_DOC_BG = '#FFFFFF'
+const eyeCare = ref(false)
+const setEyeCareMode = (enabled: boolean) => {
+  eyeCare.value = enabled
+  command.value?.executeUpdateOptions({
+    background: { color: enabled ? EYE_CARE_DOC_BG : NORMAL_DOC_BG }
+  })
+}
+
+// 需求18：直接设置/获取缩放比例（1 = 100%，0.8 = 80%，1.5 = 150% …）
+const setScale = (ratio: number) => {
+  command.value?.executePageScale(ratio)
+}
+const getScale = (): number => command.value?.getOptions().scale ?? 1
+
 // 单元格配置对话框 API（<CellConfigDialog> 挂载时注册），供 <EditorDebug> 跨 slot 调用
 const cellConfigApi = ref<ICellConfigApi | null>(null)
 
@@ -93,7 +111,11 @@ const context: EditorContext = {
   pageInfo,
   isReady,
   onReady,
-  cellConfig: cellConfigApi
+  cellConfig: cellConfigApi,
+  setEyeCareMode,
+  eyeCare,
+  setScale,
+  getScale
 }
 provide(EDITOR_CONTEXT_KEY, context)
 
@@ -113,6 +135,17 @@ defineExpose({
     editor.value
       ? setControlValueByPlaceholder(editor.value.command, payload)
       : Promise.resolve(),
+  /** 需求4/5（批量）：按多个 placeholder 一次性批量替换控件值 */
+  setControlValuesByPlaceholder: (payloads: IReplaceControlPayload[]) =>
+    editor.value
+      ? setControlValuesByPlaceholder(editor.value.command, payloads)
+      : Promise.resolve(),
+  /** 护眼模式：enabled=true 时文档背景 #cfe8cc、文档外空白区 #d7e7da */
+  setEyeCareMode,
+  /** 需求18：直接设置缩放比例（如 0.8 / 1.5 / 2，单位与 100% 对应 1） */
+  setScale,
+  /** 需求18：获取当前缩放比例（1 = 100%） */
+  getScale,
   /** 需求 8.5：按 name 更新子表数据 */
   setChildTable: (payload: ISetChildTablePayload) =>
     editor.value?.command.setChildTable(payload),
@@ -139,7 +172,7 @@ defineExpose({
 </script>
 
 <template>
-  <div class="canvas-editor">
+  <div class="canvas-editor" :class="{ 'eye-care': eyeCare }">
     <slot v-if="showToolbar && (!mode || mode === EditorMode.EDIT)" name="toolbar" :command="command"
       :range-style="rangeStyle" :page-info="pageInfo" />
     <EditorToolbar v-if="mode === EditorMode.EDIT && !$slots.toolbar" />
@@ -165,6 +198,11 @@ defineExpose({
   height: 100%;
   min-height: 0;
   background-color: #f2f4f7;
+}
+
+/* 护眼模式：文档以外的空白区域使用 #d7e7da（文档本身底色由 background.color 控制） */
+.canvas-editor.eye-care {
+  background-color: #d7e7da;
 }
 
 .canvas-editor__body {

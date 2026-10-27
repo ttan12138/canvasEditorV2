@@ -121,7 +121,7 @@ import {
   ControlComponent,
   ControlIndentation
 } from '../../dataset/enum/Control'
-import { formatElementList } from '../../utils/element'
+import { formatElementList, refreshPlaceholderElements } from '../../utils/element'
 import { shrinkColgroupToWidth } from '../../utils/table'
 import { WorkerManager } from '../worker/WorkerManager'
 import { Previewer } from './particle/previewer/Previewer'
@@ -1579,6 +1579,21 @@ export class Draw {
       isSubmitHistory: false,
       isSetCursor: false
     })
+  }
+
+  // 占位符选项（size/font/color/maxLength）变更后，原地重建页眉/正文/页脚内的占位符元素，
+  // 使 render 立即反映最新配置（控件占位符在格式化时已烤进元素列表，仅 render 不会重跑格式化）
+  public refreshPlaceholder(): void {
+    refreshPlaceholderElements(this.getHeaderElementList(), this.options)
+    refreshPlaceholderElements(this.elementList, this.options)
+    refreshPlaceholderElements(this.getFooterElementList(), this.options)
+  }
+
+  // 页面几何相关选项（width/height/margins/scale/paperDirection/pagePixelRatio）变更后，
+  // 必须重算页面画布与容器尺寸；否则内容会溢出/尺寸异常，需手动缩放（_updatePageSizes 由
+  // setPageScale 等触发）才能恢复。executeUpdateOptions 不会自动调用，故在此暴露入口。
+  public refreshPageSize(): void {
+    this._updatePageSizes()
   }
 
   public getOriginValue(

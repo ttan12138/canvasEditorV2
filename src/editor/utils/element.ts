@@ -596,9 +596,15 @@ export function formatElementList(
         // placeholder
         const thePlaceholderArgs: Omit<IElement, 'value'> = {
           ...controlDefaultStyle,
-          color: editorOptions.control.placeholderColor
+          color: editorOptions.control.placeholderColor,
+          size: editorOptions.placeholder.size,
+          font: editorOptions.placeholder.font
         }
-        const placeholderStrList = splitText(placeholder)
+        const placeholderMaxLength = editorOptions.placeholder.maxLength
+        const placeholderStrList =
+          placeholderMaxLength > 0
+            ? splitText(placeholder).slice(0, placeholderMaxLength)
+            : splitText(placeholder)
         for (let p = 0; p < placeholderStrList.length; p++) {
           const value = placeholderStrList[p]
           elementList.splice(i, 0, {
@@ -1209,6 +1215,65 @@ export function formatElementContext(
     }
     deleteProperty(cloneAttr, ignoreContextKeys)
     cloneProperty<IElement>(cloneAttr, copyElement, targetElement)
+  }
+}
+
+// 占位符选项（size/font/color/maxLength）变更后，原地重建当前元素列表中所有控件占位符元素，
+// 使其立即反映最新配置。控件占位符在 formatElementList 时已被“烤”进元素列表，render 不会重跑
+// 格式化，故需在此就地重建占位符字符元素（含表格单元格内的占位符，递归处理）。
+interface IPlaceholderRefreshOptions {
+  placeholder: { size?: number; font?: string; maxLength?: number }
+  control: { placeholderColor?: string }
+}
+
+export function refreshPlaceholderElements(
+  elementList: IElement[],
+  editorOptions: IPlaceholderRefreshOptions
+): void {
+  const { size, font, maxLength } = editorOptions.placeholder
+  const placeholderColor = editorOptions.control.placeholderColor
+  let i = 0
+  while (i < elementList.length) {
+    const el = elementList[i]
+    // 递归处理表格单元格内的占位符
+    if (el.type === ElementType.TABLE && el.trList) {
+      for (const tr of el.trList) {
+        for (const td of tr.tdList) {
+          refreshPlaceholderElements(td.value, editorOptions)
+        }
+      }
+      i++
+      continue
+    }
+    if (el.controlComponent === ControlComponent.PLACEHOLDER && el.control) {
+      // 收集同一占位符的连续字符元素
+      let j = i
+      while (
+        j < elementList.length &&
+        elementList[j].controlComponent === ControlComponent.PLACEHOLDER &&
+        elementList[j].controlId === el.controlId
+      ) {
+        j++
+      }
+      const control = el.control
+      const charList = splitText(control.placeholder || '')
+      const displayChars =
+        maxLength && maxLength > 0 ? charList.slice(0, maxLength) : charList
+      const newRun: IElement[] = displayChars.map(ch => ({
+        ...el,
+        value: ch === '\n' ? ZERO : ch,
+        size,
+        font,
+        color: placeholderColor,
+        controlComponent: ControlComponent.PLACEHOLDER,
+        controlId: el.controlId,
+        control
+      }))
+      elementList.splice(i, j - i, ...newRun)
+      i += newRun.length
+    } else {
+      i++
+    }
   }
 }
 

@@ -154,7 +154,8 @@ const optionGroups: { group: string; fields: OptField[] }[] = [
       { path: 'placeholder.color', label: '颜色', type: 'color' },
       { path: 'placeholder.opacity', label: '透明度', type: 'number', min: 0, max: 1, step: 0.1 },
       { path: 'placeholder.size', label: '字号', type: 'number', min: 1 },
-      { path: 'placeholder.font', label: '字体', type: 'text' }
+      { path: 'placeholder.font', label: '字体', type: 'text' },
+      { path: 'placeholder.maxLength', label: '显示长度上限(0=不限制)', type: 'number', min: 0 }
     ]
   },
   {

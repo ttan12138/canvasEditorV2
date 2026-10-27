@@ -25,6 +25,14 @@ export interface EditorContext {
   onReady: (callback: (editor: Editor) => void) => void
   /** 单元格配置对话框 API（<CellConfigDialog> 挂载后可用） */
   cellConfig: Ref<ICellConfigApi | null>
+  /** 护眼模式：设置文档背景色与文档外空白区配色 */
+  setEyeCareMode: (enabled: boolean) => void
+  /** 当前是否处于护眼模式 */
+  eyeCare: Ref<boolean>
+  /** 直接设置缩放比例（1 = 100%，如 0.8 / 1.5 / 2） */
+  setScale: (ratio: number) => void
+  /** 获取当前缩放比例（1 = 100%） */
+  getScale: () => number
 }
 
 export const EDITOR_CONTEXT_KEY: InjectionKey<EditorContext> =

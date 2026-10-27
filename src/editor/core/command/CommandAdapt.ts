@@ -2892,6 +2892,23 @@ export class CommandAdapt {
     Object.entries(newOption).forEach(([key, value]) => {
       Reflect.set(this.options, key, value)
     })
+    // 占位符配置（size/font/color/maxLength）变更需重建占位符元素，使 render 立即生效
+    if (payload.placeholder) {
+      this.draw.refreshPlaceholder()
+    }
+    // 页面几何相关选项变更后必须重算页面画布与容器尺寸，否则内容溢出/尺寸异常
+    // （仅在相关字段存在时才重算，避免无谓的 canvas 上下文重建）
+    const pageSizeKeys = [
+      'width',
+      'height',
+      'margins',
+      'scale',
+      'paperDirection',
+      'pagePixelRatio'
+    ]
+    if (pageSizeKeys.some(key => key in payload)) {
+      this.draw.refreshPageSize()
+    }
     this.forceUpdate()
   }
 

@@ -25,6 +25,11 @@ const editorOptions: any = {
     4: { size: 20 },
     5: { size: 18 },
     6: { size: 16 }
+  },
+  placeholder: {
+    size: 16,
+    font: 'Microsoft YaHei',
+    maxLength: 0
   }
 }
 

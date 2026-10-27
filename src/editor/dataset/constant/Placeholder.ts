@@ -5,5 +5,6 @@ export const defaultPlaceholderOption: Readonly<Required<IPlaceholder>> = {
   color: '#DCDFE6',
   opacity: 1,
   size: 16,
-  font: 'Microsoft YaHei'
+  font: 'Microsoft YaHei',
+  maxLength: 0
 }

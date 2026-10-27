@@ -478,6 +478,20 @@ export async function setControlValueByPlaceholder(
   }
 }
 
+/**
+ * 需求4/5（批量）：一次性按多个 placeholder 设置控件值（支持文本/图片）
+ * 内部顺序执行每个 payload，避免并发修改控件内部状态。
+ * @returns 完成 Promise
+ */
+export async function setControlValuesByPlaceholder(
+  command: Command,
+  payloads: IReplaceControlPayload[]
+): Promise<void> {
+  for (const payload of payloads) {
+    await setControlValueByPlaceholder(command, payload)
+  }
+}
+
 /** 查找占位符匹配的控件 id 列表 */
 function findControlIdsByPlaceholder(command: Command, name: string): string[] {
   const list = command.getControlList()

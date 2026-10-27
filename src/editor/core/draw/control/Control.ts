@@ -1108,7 +1108,11 @@ export class Control {
     const startElement = elementList[startIndex]
     const control = startElement.control!
     if (!control.placeholder) return
-    const placeholderStrList = splitText(control.placeholder)
+    const placeholderMaxLength = this.options.placeholder.maxLength
+    const placeholderStrList =
+      placeholderMaxLength > 0
+        ? splitText(control.placeholder).slice(0, placeholderMaxLength)
+        : splitText(control.placeholder)
     // 优先使用默认控件样式
     const anchorElementStyleAttr = pickObject(startElement, CONTROL_STYLE_ATTR)
     for (let p = 0; p < placeholderStrList.length; p++) {
@@ -1120,7 +1124,9 @@ export class Control {
         type: ElementType.CONTROL,
         control: startElement.control,
         controlComponent: ControlComponent.PLACEHOLDER,
-        color: this.controlOptions.placeholderColor
+        color: this.controlOptions.placeholderColor,
+        size: this.options.placeholder.size,
+        font: this.options.placeholder.font
       }
       formatElementContext(elementList, [newElement], startIndex, {
         editorOptions: this.options

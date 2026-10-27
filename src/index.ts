@@ -16,6 +16,7 @@ export {
   useCanvasEditor,
   getPlaceholderTextControls,
   setControlValueByPlaceholder,
+  setControlValuesByPlaceholder,
   setControlEditableByPlaceholder,
   setImageControlConfigForAll,
   setImageControlConfigByPlaceholder,

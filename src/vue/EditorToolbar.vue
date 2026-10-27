@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   ControlType,
   ElementType,
@@ -12,6 +12,7 @@ import {
 import { Dialog } from '../components/dialog/Dialog'
 import { useEditorContext } from './context'
 import OptionsConfigDialog from './OptionsConfigDialog.vue'
+import Icon from './Icon.vue'
 
 // 表单模式精简工具栏：隐藏「插入占位符 / 表格」组，仅保留格式化按键与缩放区
 const props = withDefaults(
@@ -40,9 +41,9 @@ const onDocxFileChange = (evt: Event) => {
   reader.onload = () => {
     const command = ctx.getCommand()
     if (!command) return
-    ;(command as unknown as {
-      executeImportDocx: (opts: { arrayBuffer: ArrayBuffer }) => void
-    }).executeImportDocx({ arrayBuffer: reader.result as ArrayBuffer })
+      ; (command as unknown as {
+        executeImportDocx: (opts: { arrayBuffer: ArrayBuffer }) => void
+      }).executeImportDocx({ arrayBuffer: reader.result as ArrayBuffer })
     input.value = ''
   }
   reader.onerror = () => {
@@ -52,6 +53,32 @@ const onDocxFileChange = (evt: Event) => {
 }
 
 const style = computed(() => ctx.rangeStyle.value)
+
+// 格式刷：复制选区样式后进入刷子模式，再次点击取消（单击模式应用一次后由编辑器自动清除）
+const painterActive = ref(false)
+const onPainter = () => {
+  run(command => command.executePainter({ isDblclick: false }))
+  // 乐观切换，立即反馈；真实状态由下方 watch 按 rangeStyle.painter 同步回图标
+  painterActive.value = !painterActive.value
+}
+
+// 格式刷的真实状态由编辑器的 painterStyle 决定；rangeStyle 在选区/样式变化时会重算 painter 字段。
+// 单击模式应用一次后编辑器自动清除 painterStyle，rangeStyle 随之更新 painter=false，
+// 这里把图标“选中”态同步回真实状态，避免失活后图标仍停在选中。
+watch(
+  () => style.value?.painter,
+  val => {
+    painterActive.value = !!val
+  },
+  { immediate: true }
+)
+
+// 按 Esc 退出格式刷时，编辑器会清除 painterStyle（但不一定触发 rangeStyle 重算），主动回弹
+const onPainterKeydown = (evt: KeyboardEvent) => {
+  if (evt.key === 'Escape') painterActive.value = false
+}
+onMounted(() => window.addEventListener('keydown', onPainterKeydown))
+onBeforeUnmount(() => window.removeEventListener('keydown', onPainterKeydown))
 
 const run = (fn: (command: Command) => void) => {
   const command = ctx.getCommand()
@@ -107,11 +134,11 @@ const LIST_OPTIONS: Array<{
     { label: '复选框列表', listType: ListType.UL, listStyle: ListStyle.CHECKBOX }
   ]
 
-const ALIGN_OPTIONS: Array<{ label: string; rowFlex: RowFlex }> = [
-  { label: '左对齐', rowFlex: RowFlex.LEFT },
-  { label: '居中', rowFlex: RowFlex.CENTER },
-  { label: '右对齐', rowFlex: RowFlex.RIGHT },
-  { label: '两端对齐', rowFlex: RowFlex.ALIGNMENT }
+const ALIGN_OPTIONS: Array<{ label: string; rowFlex: RowFlex; icon: string }> = [
+  { label: '左对齐', rowFlex: RowFlex.LEFT, icon: 'align-left' },
+  { label: '居中', rowFlex: RowFlex.CENTER, icon: 'align-center' },
+  { label: '右对齐', rowFlex: RowFlex.RIGHT, icon: 'align-right' },
+  { label: '两端对齐', rowFlex: RowFlex.ALIGNMENT, icon: 'align-justify' }
 ]
 
 // 字体族（与 index.html 菜单保持一致）
@@ -239,6 +266,19 @@ const onColorChange = (evt: Event, type: 'color' | 'highlight') => {
   })
 }
 
+// 直接输入数字字号：回车或失焦时应用
+const onSizeInput = (evt: Event) => {
+  const target = evt.target as HTMLInputElement
+  const size = Number(target.value)
+  if (!Number.isFinite(size) || size < 1) {
+    // 非法输入还原为当前字号，避免输入框显示错误值
+    target.value = style.value?.size != null ? String(style.value.size) : ''
+    return
+  }
+  run(command => command.executeSize(Math.round(size)))
+  target.blur()
+}
+
 const insertTextControl = () => {
   new Dialog({
     title: '文本控件',
@@ -318,13 +358,17 @@ const onCellHover = (row: number, col: number) => {
   <div ref="rootRef" class="ce-toolbar">
     <div class="ce-toolbar__group">
       <button type="button" title="撤销" :disabled="!style?.undo" @click="run(c => c.executeUndo())">
-        撤销
+        <Icon name="undo" />
       </button>
       <button type="button" title="重做" :disabled="!style?.redo" @click="run(c => c.executeRedo())">
-        重做
+        <Icon name="redo" />
       </button>
       <button type="button" title="清除格式" @click="run(c => c.executeFormat())">
-        清除格式
+        <Icon name="clean" />
+      </button>
+      <button type="button" title="格式刷：选中源文本后点击，再刷到目标文本（再次点击取消）" :class="{ 'is-active': painterActive }"
+        @click="onPainter">
+        <Icon name="format-painter" />
       </button>
     </div>
 
@@ -358,35 +402,36 @@ const onCellHover = (row: number, col: number) => {
       <button type="button" title="减小字号" @click="run(c => c.executeSizeMinus())">
         A-
       </button>
-      <span class="ce-toolbar__text">{{ style?.size ?? '--' }}</span>
+      <input class="ce-toolbar__size-input" type="number" min="1" :value="style?.size ?? ''" title="直接输入字号，回车或失焦生效"
+        @change="onSizeInput" @keydown.enter.prevent="onSizeInput" />
       <button type="button" title="增大字号" @click="run(c => c.executeSizeAdd())">
         A+
       </button>
       <button type="button" :class="{ 'is-active': isActive('bold') }" @click="run(c => c.executeBold())">
-        <b>B</b>
+        <Icon name="bold" />
       </button>
       <button type="button" :class="{ 'is-active': isActive('italic') }" @click="run(c => c.executeItalic())">
-        <i>I</i>
+        <Icon name="italic" />
       </button>
       <button type="button" :class="{ 'is-active': isActive('underline') }" @click="run(c => c.executeUnderline())">
-        <u>U</u>
+        <Icon name="underline" />
       </button>
       <button type="button" :class="{ 'is-active': isActive('strikeout') }" @click="run(c => c.executeStrikeout())">
-        <s>S</s>
+        <Icon name="strikeout" />
       </button>
       <button type="button" title="上标" @click="run(c => c.executeSuperscript())">
-        X²
+        <Icon name="superscript" />
       </button>
       <button type="button" title="下标" @click="run(c => c.executeSubscript())">
-        X₂
+        <Icon name="subscript" />
       </button>
       <label class="ce-toolbar__color" title="字体颜色">
-        A
+        <Icon name="color" :size="18" />
         <span :style="{ backgroundColor: style?.color || '#000000' }" />
         <input type="color" @input="evt => onColorChange(evt, 'color')" />
       </label>
       <label class="ce-toolbar__color" title="高亮">
-        H
+        <Icon name="highlight" :size="18" />
         <span :style="{ backgroundColor: style?.highlight || '#ffff00' }" />
         <input type="color" @input="evt => onColorChange(evt, 'highlight')" />
       </label>
@@ -409,11 +454,13 @@ const onCellHover = (row: number, col: number) => {
 
       <button v-for="item in ALIGN_OPTIONS" :key="item.label" type="button" :title="item.label"
         :class="{ 'is-active': isAlignActive(item.rowFlex) }" @click="run(c => c.executeRowFlex(item.rowFlex))">
-        {{ item.label[0] }}
+        <Icon :name="item.icon" />
       </button>
 
       <div class="ce-toolbar__dropdown">
-        <button type="button" @click="toggleDropdown('list')">列表</button>
+        <button type="button" title="列表" @click="toggleDropdown('list')">
+          <Icon name="list-bullet" />
+        </button>
         <ul v-if="activeDropdown === 'list'" class="ce-toolbar__options">
           <li v-for="item in LIST_OPTIONS" :key="item.label"
             :class="{ 'is-active': isListActive(item.listType, item.listStyle) }"
@@ -439,9 +486,13 @@ const onCellHover = (row: number, col: number) => {
     <span v-if="!simplified" class="ce-toolbar__divider" />
 
     <div v-if="!simplified" class="ce-toolbar__group">
-      <button type="button" @click="insertTextControl">插入占位符</button>
+      <button type="button" title="插入占位符" @click="insertTextControl">
+        <Icon name="insert" />
+      </button>
       <div class="ce-toolbar__dropdown">
-        <button type="button" @click="toggleDropdown('table')">表格</button>
+        <button type="button" title="表格" @click="toggleDropdown('table')">
+          <Icon name="table" />
+        </button>
         <div v-if="activeDropdown === 'table'" class="ce-toolbar__table">
           <div class="ce-toolbar__table-title">
             {{ tableRow && tableCol ? `${tableRow}×${tableCol}` : '插入' }}
@@ -454,23 +505,23 @@ const onCellHover = (row: number, col: number) => {
           </div>
         </div>
       </div>
-      <button type="button" @click="run(c => c.executeInsertTable(3, 3))">
-        快速表格
+      <button type="button" title="快速表格" @click="run(c => c.executeInsertTable(3, 3))">
+        <Icon name="table-quick" />
       </button>
     </div>
 
     <span class="ce-toolbar__divider" />
 
     <div class="ce-toolbar__group">
-      <button type="button" @click="run(c => c.executePageScaleMinus())">
-        缩小
+      <button type="button" title="缩小" @click="run(c => c.executePageScaleMinus())">
+        <Icon name="zoom-out" />
       </button>
       <span class="ce-toolbar__text">{{ scaleText }}</span>
-      <button type="button" @click="run(c => c.executePageScaleAdd())">
-        放大
+      <button type="button" title="放大" @click="run(c => c.executePageScaleAdd())">
+        <Icon name="zoom-in" />
       </button>
-      <button type="button" @click="run(c => c.executePageScaleRecovery())">
-        复原
+      <button type="button" title="复原" @click="run(c => c.executePageScaleRecovery())">
+        <Icon name="zoom-reset" />
       </button>
     </div>
 
@@ -478,10 +529,10 @@ const onCellHover = (row: number, col: number) => {
 
     <div class="ce-toolbar__group">
       <button type="button" title="打印预览（调试）" @click="run(c => c.executePrintPreview())">
-        打印预览
+        <Icon name="print-preview" />
       </button>
       <button type="button" title="导出 PDF 文件" @click="run(c => c.executePrintPdf(true))">
-        打印文件
+        <Icon name="print" />
       </button>
     </div>
 
@@ -489,18 +540,12 @@ const onCellHover = (row: number, col: number) => {
 
     <div class="ce-toolbar__group">
       <button type="button" title="导入 docx 文件" @click="importDocx">
-        导入docx
+        <Icon name="upload" />
       </button>
       <button type="button" title="选项配置" @click="optRef?.open()">
-        选项配置
+        <Icon name="settings" />
       </button>
-      <input
-        ref="docxInputRef"
-        type="file"
-        accept=".docx"
-        style="display: none"
-        @change="onDocxFileChange"
-      />
+      <input ref="docxInputRef" type="file" accept=".docx" style="display: none" @change="onDocxFileChange" />
     </div>
 
     <OptionsConfigDialog ref="optRef" />
@@ -533,6 +578,9 @@ const onCellHover = (row: number, col: number) => {
 }
 
 .ce-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 28px;
   height: 26px;
   padding: 0 6px;
@@ -542,6 +590,12 @@ const onCellHover = (row: number, col: number) => {
   color: #3d4757;
   font-size: 13px;
   cursor: pointer;
+}
+
+/* 纯图标按钮（含 <Icon>）：方块化、去除横向内边距，更贴合图标工具栏观感 */
+.ce-toolbar button:has(.ce-icon) {
+  padding: 0;
+  width: 28px;
 }
 
 .ce-toolbar button:hover {
@@ -565,10 +619,38 @@ const onCellHover = (row: number, col: number) => {
   color: #767c85;
 }
 
+.ce-toolbar__size-input {
+  width: 48px;
+  height: 26px;
+  padding: 0 4px;
+  border: 1px solid #e2e6ed;
+  border-radius: 4px;
+  font-size: 13px;
+  text-align: center;
+  color: #3d4757;
+  background: #fff;
+  outline: none;
+}
+
+.ce-toolbar__size-input:focus {
+  border-color: #193758;
+}
+
+/* 隐藏数字输入框的上下微调箭头，保持工具栏紧凑 */
+.ce-toolbar__size-input::-webkit-outer-spin-button,
+.ce-toolbar__size-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.ce-toolbar__size-input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 .ce-toolbar__color {
   position: relative;
-  display: flex;
-  flex-direction: column;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 28px;
@@ -582,9 +664,14 @@ const onCellHover = (row: number, col: number) => {
   background: rgba(25, 55, 88, 0.06);
 }
 
+/* 当前颜色/高亮色：绝对定位到底部细条，图标保持与其它图标按钮一致的水平居中 */
 .ce-toolbar__color span {
-  width: 14px;
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 2px;
   height: 3px;
+  border-radius: 1.5px;
 }
 
 .ce-toolbar__color input {

@@ -80,11 +80,16 @@ export class Placeholder {
   ) {
     const { placeholder = this.options.placeholder } = options || {}
     const { data, font, size, color, opacity } = placeholder
+    const maxLength = placeholder.maxLength
+    const displayData =
+      maxLength && maxLength > 0 && data.length > maxLength
+        ? data.slice(0, maxLength)
+        : data
     this._recovery()
     // 构建元素列表并格式化
     this.elementList = [
       {
-        value: data,
+        value: displayData,
         font,
         size,
         color

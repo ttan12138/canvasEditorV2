@@ -25,6 +25,7 @@ export type { EditorEmits, EditorEventName, PageInfo } from './types'
 export {
   getPlaceholderTextControls,
   setControlValueByPlaceholder,
+  setControlValuesByPlaceholder,
   setControlEditableByPlaceholder,
   setImageControlConfigForAll,
   setImageControlConfigByPlaceholder
