@@ -5,7 +5,7 @@ export interface IDialogData {
   type: string
   label?: string
   name: string
-  value?: string
+  value?: string | boolean
   options?: { label: string; value: string }[]
   placeholder?: string
   width?: number
@@ -97,6 +97,8 @@ export class Dialog {
         | HTMLInputElement
         | HTMLTextAreaElement
         | HTMLSelectElement
+      // 实际追加到 DOM 的节点（开关类型为带样式的 label 包裹）
+      let nodeToAppend: HTMLElement
       if (option.type === 'select') {
         optionInput = document.createElement('select')
         option.options?.forEach(item => {
@@ -105,11 +107,46 @@ export class Dialog {
           optionItem.label = item.label
           optionInput.append(optionItem)
         })
+        nodeToAppend = optionInput
       } else if (option.type === 'textarea') {
         optionInput = document.createElement('textarea')
+        nodeToAppend = optionInput
+      } else if (option.type === 'switch' || option.type === 'checkbox') {
+        // 需求：占位符对话框布尔项以开关（toggle）呈现，底层仍为 checkbox 以便取值
+        optionInput = document.createElement('input')
+        const inputEl = optionInput as HTMLInputElement
+        inputEl.type = 'checkbox'
+        inputEl.checked = option.value === true || option.value === 'true'
+        if (option.type === 'switch') {
+          // 内联样式实现开关，不依赖外部样式表，避免样式未注入/被覆盖时不可见
+          optionInput.style.cssText =
+            'position:absolute;width:0;height:0;margin:0;opacity:0;'
+          const switchEl = document.createElement('label')
+          switchEl.style.cssText =
+            'position:relative;display:inline-block;width:44px;height:22px;cursor:pointer;user-select:none;'
+          const track = document.createElement('span')
+          track.style.cssText =
+            'position:absolute;left:0;top:0;width:44px;height:22px;border-radius:11px;background:#c0c4cc;transition:background .2s;'
+          const knob = document.createElement('span')
+          knob.style.cssText =
+            'position:absolute;left:2px;top:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .2s;'
+          const applyState = () => {
+            track.style.background = inputEl.checked ? '#4991f2' : '#c0c4cc'
+            knob.style.transform = inputEl.checked
+              ? 'translateX(22px)'
+              : 'translateX(0)'
+          }
+          inputEl.addEventListener('change', applyState)
+          applyState()
+          switchEl.append(inputEl, track, knob)
+          nodeToAppend = switchEl
+        } else {
+          nodeToAppend = optionInput
+        }
       } else {
         optionInput = document.createElement('input')
         optionInput.type = option.type
+        nodeToAppend = optionInput
       }
       if (option.width) {
         optionInput.style.width = `${option.width}px`
@@ -118,11 +155,12 @@ export class Dialog {
         optionInput.style.height = `${option.height}px`
       }
       optionInput.name = option.name
-      optionInput.value = option.value || ''
+      // 复选框用 checked 表示状态，value 仅作属性，统一转字符串避免 boolean 赋值报错
+      optionInput.value = (option.value ?? '').toString()
       if (!(optionInput instanceof HTMLSelectElement)) {
         optionInput.placeholder = option.placeholder || ''
       }
-      optionItemContainer.append(optionInput)
+      optionItemContainer.append(nodeToAppend)
       optionContainer.append(optionItemContainer)
       this.inputList.push(optionInput)
     }
@@ -148,10 +186,16 @@ export class Dialog {
     confirmBtn.type = 'submit'
     confirmBtn.onclick = () => {
       if (onConfirm) {
-        const payload = this.inputList.map<IDialogConfirm>(input => ({
-          name: input.name,
-          value: input.value
-        }))
+        const payload = this.inputList.map<IDialogConfirm>(input => {
+          // 复选框以 checked 状态返回 'true'/'false'，而非 input.value
+          if (
+            input instanceof HTMLInputElement &&
+            input.type === 'checkbox'
+          ) {
+            return { name: input.name, value: input.checked ? 'true' : 'false' }
+          }
+          return { name: input.name, value: input.value }
+        })
         onConfirm(payload)
       }
       this._dispose()

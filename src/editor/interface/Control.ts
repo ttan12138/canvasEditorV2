@@ -100,8 +100,12 @@ export interface IControlBasic {
   imageControl?: boolean
   /** 需求 4.1/12：控件内图片是否支持拖拽调整顺序 */
   imageDraggable?: boolean
+  /** 需求 4.5：控件内图片是否支持拖拽交换位置（优先级高于图片级 swappable） */
+  imageSwappable?: boolean
   /** 需求 4.2/12：控件内图片是否支持右键删除（图片级 canDelete 优先） */
   imageCanDelete?: boolean
+  /** 需求 4.3/12：控件内图片是否显示 resize 句柄用于调整尺寸（默认 true） */
+  imageResizable?: boolean
   /** 需求 11：表单模式下控件是否可编辑（缺省可编辑，false 不可编辑） */
   editable?: boolean
 }

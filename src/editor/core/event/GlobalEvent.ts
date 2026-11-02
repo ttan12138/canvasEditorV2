@@ -1,6 +1,6 @@
 import { EDITOR_COMPONENT } from '../../dataset/constant/Editor'
 import { IEditorOption } from '../../interface/Editor'
-import { findParent } from '../../utils'
+import { findParent, findScrollContainer } from '../../utils'
 import { Cursor } from '../cursor/Cursor'
 import { Control } from '../draw/control/Control'
 import { Draw } from '../draw/Draw'
@@ -142,19 +142,34 @@ export class GlobalEvent {
     if (!evt.ctrlKey) return
     evt.preventDefault()
     const { scale } = this.options
+    // 以鼠标指针位置作为缩放中心，保持该位置内容在视图中不动
+    const anchorY = this._getScaleAnchorY(evt)
     if (evt.deltaY < 0) {
       // 放大
       const nextScale = scale * 10 + 1
       if (nextScale <= 30) {
-        this.draw.setPageScale(nextScale / 10)
+        this.draw.setPageScale(nextScale / 10, anchorY)
       }
     } else {
       // 缩小
       const nextScale = scale * 10 - 1
       if (nextScale >= 5) {
-        this.draw.setPageScale(nextScale / 10)
+        this.draw.setPageScale(nextScale / 10, anchorY)
       }
     }
+  }
+
+  // 计算鼠标指针相对滚动内容顶部的像素位置，作为缩放锚点
+  private _getScaleAnchorY(evt: WheelEvent): number {
+    const scrollContainer = findScrollContainer(this.draw.getContainer())
+    const isDocumentScroll = scrollContainer === document.documentElement
+    const rect = isDocumentScroll
+      ? { top: 0, left: 0 }
+      : (scrollContainer as HTMLElement).getBoundingClientRect()
+    const scrollTop = isDocumentScroll
+      ? window.scrollY
+      : (scrollContainer as HTMLElement).scrollTop
+    return evt.clientY - rect.top + scrollTop
   }
 
   private _handleVisibilityChange = () => {

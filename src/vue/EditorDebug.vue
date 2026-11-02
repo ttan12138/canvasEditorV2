@@ -10,8 +10,14 @@ import {
   setControlEditableByPlaceholder,
   setImageControlConfigForAll,
   setImageControlConfigByPlaceholder,
+  setControlContentByPlaceholder,
+  clearControlValueByPlaceholder,
+  clearControlValuesByPlaceholder,
+  setAllControlEditable,
+  setControlsEditableByPlaceholders,
   type IImageControlConfig,
-  type IReplaceValueDetail
+  type IReplaceValueDetail,
+  type ISetControlContentByPlaceholderPayload
 } from './control'
 
 // 调试面板：通过 useEditorContext 注入的编辑器实例，复用需求 3~10 的全部验证能力，
@@ -231,6 +237,7 @@ const replaceImageByPlaceholder = (
     values?: IReplaceValueDetail[]
     draggable?: boolean
     canDelete?: boolean
+    resize?: boolean
   } = {}
 ) => {
   const command = cmd()
@@ -241,6 +248,29 @@ const replaceImageByPlaceholder = (
     valueType: 'IMAGE',
     ...extra
   })
+}
+// 5.5：写入带描述文字（题注）的图片——位于图片正下方、相对（图+padding）宽度居中、超出换行
+const replaceImageWithCaption = (name: string) => {
+  const command = cmd()
+  if (!command) return
+  setControlValueByPlaceholder(command, {
+    name,
+    valueType: 'IMAGE',
+    count: 2,
+    values: [
+      {
+        value: makeSampleImage(200, 80, '#3a6ea5'),
+        valueType: 'IMAGE',
+        text: '这是第一张图片的描述文字，较长时会自动换行并相对（图像+左右padding）宽度居中展示在图片正下方。'
+      },
+      {
+        value: makeSampleImage(200, 80, '#7a4ea5'),
+        valueType: 'IMAGE',
+        text: '第二张图的描述'
+      }
+    ]
+  })
+  resultText.value = `已写入带描述文字的图片到「${name}」（切表单/只读模式查看题注居中换行）`
 }
 
 // ============ 需求 6：插入带前缀/后缀文本控件 ============
@@ -325,6 +355,17 @@ const writeSubTable = () => {
 const clearSubTable = () => {
   cmd()?.setChildTable({ name: 'subA', data: [] })
 }
+// 8.5：对象数组写入（每条 object 的 key 需与子表表头 key 匹配：name/age）
+const writeSubTableByObject = () => {
+  cmd()?.setChildTable({
+    name: 'subA',
+    data: [
+      { name: '王五', age: 30 },
+      { name: '赵六', age: 35 }
+    ]
+  })
+  resultText.value = '已按对象数组写入子表 subA（key 与表头 name/age 匹配）'
+}
 
 // ============ 需求 10：跨页眉/页脚/正文替换 ============
 const replaceAcrossZones = () => {
@@ -372,6 +413,26 @@ const enableImageDrag = () => {
     '已写入 5 张不同颜色可拖拽图片（只读/表单模式下按住一张图拖到另一张上交换顺序，count=3 一行 3 张）'
 }
 
+// ============ 需求 4.5：拖拽交换控件内图片位置 ============
+const enableImageSwap = () => {
+  const command = cmd()
+  if (!command) return
+  const colors = ['#3a6ea5', '#7a4ea5', '#a54e6e', '#4ea55a', '#a58a4e']
+  const values = colors.map(c => ({
+    value: makeSampleImage(200, 80, c),
+    valueType: 'IMAGE' as const
+  }))
+  setControlValueByPlaceholder(command, {
+    name: '单元格签名',
+    valueType: 'IMAGE',
+    count: 3,
+    swappable: true,
+    values
+  })
+  resultText.value =
+    '已写入 5 张可交换图片（只读/表单模式下把一张图拖到另一张图中间 60% 区域即可与其交换位置，count=3）'
+}
+
 // ============ 需求 4.2：右键删除控件内图片 ============
 const enableImageDelete = () => {
   const command = cmd()
@@ -403,14 +464,32 @@ const setControlEditable = (name: string, editable: boolean) => {
   const count = setControlEditableByPlaceholder(command, name, editable)
   resultText.value = `已设置 ${count} 个占位符「${name}」控件为${editable ? '可编辑' : '不可编辑'}（切到表单模式验证）`
 }
+// 11（补充）：设置【全部】占位符控件可/不可编辑
+const setAllEditable = (editable: boolean) => {
+  const command = cmd()
+  if (!command) return
+  const count = setAllControlEditable(command, editable)
+  resultText.value = `已设置全部 ${count} 个占位符控件为${editable ? '可编辑' : '不可编辑'}（切到表单模式验证）`
+}
+// 11（补充）：按【多个】占位符设置控件可/不可编辑
+const setBatchEditable = (editable: boolean) => {
+  const command = cmd()
+  if (!command) return
+  const count = setControlsEditableByPlaceholders(
+    command,
+    ['患者姓名', '患者性别', '患者年龄'],
+    editable
+  )
+  resultText.value = `已设置 ${count} 个占位符（患者姓名/性别/年龄）控件为${editable ? '可编辑' : '不可编辑'}（切到表单模式验证）`
+}
 
-// ============ 需求 12.1：统一设置所有图片控件删除/拖拽能力 ============
+// ============ 需求 12.1：统一设置所有图片控件删除/拖拽/缩放能力 ============
 const setAllImageConfig = (config: IImageControlConfig) => {
   const command = cmd()
   if (!command) return
   bindImageDeleteListener()
   const count = setImageControlConfigForAll(command, config)
-  resultText.value = `已统一设置 ${count} 个图片控件：canDelete=${config.canDelete}, draggable=${config.draggable}（切到只读/表单模式验证）`
+  resultText.value = `已统一设置 ${count} 个图片控件：canDelete=${config.canDelete}, draggable=${config.draggable}, resize=${config.resize}, swappable=${config.swappable}（切到只读/表单模式验证）`
 }
 
 // ============ 需求 12.2：按占位符单独设置图片控件删除/拖拽能力 ============
@@ -422,6 +501,53 @@ const setImageConfig = (name: string, config: IImageControlConfig) => {
   resultText.value = count
     ? `已单独设置 ${count} 个图片控件「${name}」：${JSON.stringify(config)}`
     : `未找到图片控件「${name}」（非图片控件设置无效果）`
+}
+
+// ============ 需求 19：按 placeholder 设置带临时批注样式内容 ============
+const setContentByPlaceholder = (name: string, mode: 0 | 1 | 2) => {
+  const command = cmd()
+  if (!command) return
+  const payload: ISetControlContentByPlaceholderPayload = {
+    name,
+    value: '【新增】临时批注内容',
+    mode,
+    options: { color: '#c0392b', backgroundColor: 'rgba(241,196,15,0.35)' }
+  }
+  setControlContentByPlaceholder(command, payload)
+  resultText.value = `已按 mode=${mode} 设置「${name}」内容（带临时批注样式）`
+}
+// 多占位符：一次性逐条设置多个 placeholder（name 与 value 一一对应）
+const setContentByPlaceholders = (names: string[], mode: 0 | 1 | 2) => {
+  const command = cmd()
+  if (!command) return
+  const items = names.map((n, i) => ({
+    name: n,
+    value: `【批量${i + 1}】临时批注内容`
+  }))
+  setControlContentByPlaceholder(command, {
+    items,
+    mode,
+    options: { color: '#c0392b', backgroundColor: 'rgba(241,196,15,0.35)' }
+  })
+  resultText.value = `已按 mode=${mode} 逐条设置 ${names.join('/')} 内容（name 与 value 一一对应，带临时批注样式）`
+}
+
+// ============ 需求 19（补充）：按 placeholder 清空 ============
+const clearValueByPlaceholder = (name: string) => {
+  const command = cmd()
+  if (!command) return
+  const count = clearControlValueByPlaceholder(command, name)
+  resultText.value = `已清空 ${count} 个占位符「${name}」控件`
+}
+const clearValuesByPlaceholder = () => {
+  const command = cmd()
+  if (!command) return
+  const total = clearControlValuesByPlaceholder(command, [
+    '患者姓名',
+    '患者性别',
+    '患者年龄'
+  ])
+  resultText.value = `已批量清空 ${total} 个占位符控件（患者姓名/性别/年龄）`
 }
 </script>
 
@@ -505,6 +631,10 @@ const setImageConfig = (name: string, config: IImageControlConfig) => {
             @click="replaceImageByPlaceholder('单元格签名', makeSampleImage(300, 140))">5.1.4
             不设宽高</button>
           <button type="button"
+            title="setControlValueByPlaceholder(command, { name:'单元格签名', valueType:'IMAGE', resize:false })（写入图片并隐藏 resize 句柄）"
+            @click="replaceImageByPlaceholder('单元格签名', makeSampleImage(300, 140), { resize: false })">5.1.4
+            不设宽高+隐藏缩放</button>
+          <button type="button"
             title="setControlValueByPlaceholder(command, { name:'单元格签名', valueType:'IMAGE', count:2, values:[{padding:[10,20]},{padding:[20,20]}] })（单图宽=50%-padding）"
             @click="replaceImageByPlaceholder('单元格签名', '', { count: 2, values: [{ value: makeSampleImage(200, 80), padding: [10, 20] }, { value: makeSampleImage(200, 80), padding: [20, 20] }] })">5.3
             图片padding</button><button type="button"
@@ -528,6 +658,16 @@ const setImageConfig = (name: string, config: IImageControlConfig) => {
             仅设高</button>
           <button type="button" title="setControlValueByPlaceholder(command, { name:'其他补充', valueType:'IMAGE' })（原图宽高）"
             @click="replaceImageByPlaceholder('其他补充', makeSampleImage(200, 80))">5.2.4 原图</button>
+        </div>
+        <div class="editor-debug__row">
+          <span class="editor-debug__grp">5.5 图片描述文字（题注）：</span>
+          <button type="button"
+            title="setControlValueByPlaceholder(command, { name:'单元格签名', valueType:'IMAGE', count:2, values:[{value:<png>, text:'长描述文字…'},{value:<png>, text:'描述'}] })（位于图片正下方、相对图+padding居中、超出换行；多图换行时后续图片从题注下方开始）"
+            @click="replaceImageWithCaption('单元格签名')">写入带描述文字图片（单元格签名）</button>
+          <button type="button"
+            title="setControlValueByPlaceholder(command, { name:'其他补充', valueType:'IMAGE', count:2, values:[{value:<png>, text:'长描述文字…'},{value:<png>, text:'描述'}] })"
+            @click="replaceImageWithCaption('其他补充')">写入带描述文字图片（其他补充）</button>
+          <span class="editor-debug__tip">切表单/只读模式查看题注：正下方居中、超出换行、多图从文字下方开始</span>
         </div>
       </details>
 
@@ -565,6 +705,9 @@ const setImageConfig = (name: string, config: IImageControlConfig) => {
             @click="openCellConfigByName('subA')">配置子表 subA</button>
           <button type="button" title="command.setChildTable({ name:'subA', data:[['张三',20],['李四',25]] })"
             @click="writeSubTable">写入子表数据</button>
+          <button type="button"
+            title="command.setChildTable({ name:'subA', data:[{name:'王五',age:30},{name:'赵六',age:35}] })（对象数组：key 匹配表头 name/age）"
+            @click="writeSubTableByObject">写入子表(对象数组)</button>
           <button type="button" title="command.setChildTable({ name:'subA', data:[] })"
             @click="clearSubTable">清空子表数据</button>
         </div>
@@ -596,9 +739,16 @@ const setImageConfig = (name: string, config: IImageControlConfig) => {
         <div class="editor-debug__row">
           <span class="editor-debug__grp">4.1 拖拽排序：</span>
           <button type="button"
-            title="setControlValueByPlaceholder(command, { name:'单元格签名', valueType:'IMAGE', count:3, draggable:true, values:[5×{value:<png 200x80>,valueType:'IMAGE'}] })（只读/表单下拖拽交换顺序）"
+            title="setControlValueByPlaceholder(command, { name:'单元格签名', valueType:'IMAGE', count:3, draggable:true, values:[5×{value:<png 200x80>,valueType:'IMAGE'}] })（只读/表单下拖拽调整顺序）"
             @click="enableImageDrag">写入 5 张可拖拽图片（单元格签名）</button>
-          <span class="editor-debug__tip">只读/表单模式下按住一张图拖到另一张上交换顺序（5 张不同颜色，count=3）</span>
+          <span class="editor-debug__tip">只读/表单模式下按住一张图拖到另一张外 20% 区域（左/右）调整顺序（5 张不同颜色，count=3）</span>
+        </div>
+        <div class="editor-debug__row">
+          <span class="editor-debug__grp">4.5 拖拽交换：</span>
+          <button type="button"
+            title="setControlValueByPlaceholder(command, { name:'单元格签名', valueType:'IMAGE', count:3, swappable:true, values:[5×{value:<png 200x80>,valueType:'IMAGE'}] })（只读/表单下拖拽交换位置）"
+            @click="enableImageSwap">写入 5 张可交换图片（单元格签名）</button>
+          <span class="editor-debug__tip">只读/表单模式下把一张图拖到另一张图中间 60% 区域即可与其交换位置（橙色虚框预览）</span>
         </div>
         <div class="editor-debug__row">
           <span class="editor-debug__grp">4.2 右键删除：</span>
@@ -613,6 +763,14 @@ const setImageConfig = (name: string, config: IImageControlConfig) => {
             @click="setControlEditable('患者姓名', false)">『患者姓名』不可编辑</button>
           <button type="button" title="setControlEditableByPlaceholder(command, '患者姓名', true)"
             @click="setControlEditable('患者姓名', true)">『患者姓名』可编辑</button>
+          <button type="button" title="setControlsEditableByPlaceholders(command, ['患者姓名','患者性别','患者年龄'], false)"
+            @click="setBatchEditable(false)">多个不可编辑</button>
+          <button type="button" title="setControlsEditableByPlaceholders(command, ['患者姓名','患者性别','患者年龄'], true)"
+            @click="setBatchEditable(true)">多个可编辑</button>
+          <button type="button" title="setAllControlEditable(command, false) → 全部占位符控件不可编辑"
+            @click="setAllEditable(false)">全部不可编辑</button>
+          <button type="button" title="setAllControlEditable(command, true) → 全部占位符控件可编辑"
+            @click="setAllEditable(true)">全部可编辑</button>
           <span class="editor-debug__tip">切到表单模式验证</span>
         </div>
         <div class="editor-debug__row">
@@ -621,7 +779,15 @@ const setImageConfig = (name: string, config: IImageControlConfig) => {
             @click="setAllImageConfig({ canDelete: true, draggable: true })">全部图片控件：可删+可拖</button>
           <button type="button" title="setImageControlConfigForAll(command, { canDelete:false, draggable:false })"
             @click="setAllImageConfig({ canDelete: false, draggable: false })">全部图片控件：关闭</button>
-          <span class="editor-debug__tip">只读模式下对所有图片控件生效</span>
+          <button type="button" title="setImageControlConfigForAll(command, { resize:true })"
+            @click="setAllImageConfig({ resize: true })">全部图片控件：显示缩放句柄</button>
+          <button type="button" title="setImageControlConfigForAll(command, { resize:false })"
+            @click="setAllImageConfig({ resize: false })">全部图片控件：隐藏缩放句柄</button>
+          <button type="button" title="setImageControlConfigForAll(command, { swappable:true })"
+            @click="setAllImageConfig({ swappable: true })">全部图片控件：可交换</button>
+          <button type="button" title="setImageControlConfigForAll(command, { swappable:false })"
+            @click="setAllImageConfig({ swappable: false })">全部图片控件：关闭交换</button>
+          <span class="editor-debug__tip">只读/表单模式下对所有图片控件生效（resize 控制是否显示 resize 句柄；swappable 控制中间区域拖拽交换）</span>
         </div>
         <div class="editor-debug__row">
           <span class="editor-debug__grp">12.2 单独设置：</span>
@@ -631,9 +797,45 @@ const setImageConfig = (name: string, config: IImageControlConfig) => {
           <button type="button"
             title="setImageControlConfigByPlaceholder(command, '单元格签名', { canDelete:false, draggable:false })"
             @click="setImageConfig('单元格签名', { canDelete: false, draggable: false })">『单元格签名』关闭</button>
+          <button type="button" title="setImageControlConfigByPlaceholder(command, '单元格签名', { resize:true })"
+            @click="setImageConfig('单元格签名', { resize: true })">『单元格签名』显示缩放句柄</button>
+          <button type="button" title="setImageControlConfigByPlaceholder(command, '单元格签名', { resize:false })"
+            @click="setImageConfig('单元格签名', { resize: false })">『单元格签名』隐藏缩放句柄</button>
+          <button type="button" title="setImageControlConfigByPlaceholder(command, '单元格签名', { swappable:true })"
+            @click="setImageConfig('单元格签名', { swappable: true })">『单元格签名』可交换</button>
+          <button type="button" title="setImageControlConfigByPlaceholder(command, '单元格签名', { swappable:false })"
+            @click="setImageConfig('单元格签名', { swappable: false })">『单元格签名』关闭交换</button>
           <button type="button"
             title="setImageControlConfigByPlaceholder(command, '患者姓名', { canDelete:true }) → 非图片控件，无效果"
             @click="setImageConfig('患者姓名', { canDelete: true })">『患者姓名』（非图片控件，无效）</button>
+        </div>
+      </details>
+
+      <details open>
+        <summary>需求 19：按 placeholder 设置/清空（临时批注样式）</summary>
+        <div class="editor-debug__row">
+          <span class="editor-debug__grp">设置：</span>
+          <button type="button"
+            title="setControlContentByPlaceholder(command, { name:'其他补充', value:'【新增】临时批注内容', mode:0, options:{color,backgroundColor} }) → 直接替换"
+            @click="setContentByPlaceholder('其他补充', 0)">mode=0 替换『其他补充』</button>
+          <button type="button"
+            title="setControlContentByPlaceholder(command, { name:'其他补充', value:'【新增】临时批注内容', mode:1 }) → 末尾追加"
+            @click="setContentByPlaceholder('其他补充', 1)">mode=1 末尾追加『其他补充』</button>
+          <button type="button"
+            title="setControlContentByPlaceholder(command, { name:'患者姓名', value:'【新增】临时批注内容', mode:2 }) → 光标处追加（光标不在占位符内回退到1）"
+            @click="setContentByPlaceholder('患者姓名', 2)">mode=2 光标处『患者姓名』</button>
+          <button type="button"
+            title="setControlContentByPlaceholder(command, { name:['患者姓名','患者性别','患者年龄'], value:'【批量】临时批注内容', mode:1 }) → 多占位符并集、末尾追加"
+            @click="setContentByPlaceholders(['患者姓名', '患者性别', '患者年龄'], 1)">多占位符追加（姓名/性别/年龄）</button>
+          <span class="editor-debug__tip">内容带临时批注样式：下一次聚焦/设置/打印/取值前清除（回文档默认样式）</span>
+        </div>
+        <div class="editor-debug__row">
+          <span class="editor-debug__grp">清空：</span>
+          <button type="button" title="clearControlValueByPlaceholder(command, '患者姓名') → 清空单个占位符控件"
+            @click="clearValueByPlaceholder('患者姓名')">清空『患者姓名』</button>
+          <button type="button" title="clearControlValuesByPlaceholder(command, ['患者姓名','患者性别','患者年龄']) → 批量清空多个占位符控件"
+            @click="clearValuesByPlaceholder">批量清空（姓名/性别/年龄）</button>
+          <span class="editor-debug__tip">文本/SELECT/CHECKBOX/RADIO/DATE/NUMBER 均可清空</span>
         </div>
       </details>
 

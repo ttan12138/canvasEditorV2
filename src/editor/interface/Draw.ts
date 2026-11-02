@@ -12,6 +12,8 @@ export interface IDrawOption {
   isInit?: boolean
   isSourceHistory?: boolean
   isFirstRender?: boolean
+  /** 是否聚焦光标（默认 true）；false 时仅绘制光标不聚焦（用于「仅滚动不聚焦」场景） */
+  isFocus?: boolean
 }
 
 // 编辑影响区间（元素索引，左闭右开）：增量续算的起点与收敛防线

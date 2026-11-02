@@ -16,6 +16,7 @@ export class Command {
   public executeHideCursor: CommandAdapt['hideCursor']
   public executeUndo: CommandAdapt['undo']
   public executeRedo: CommandAdapt['redo']
+  public executeClearHistory: CommandAdapt['clearHistory']
   public executePainter: CommandAdapt['painter']
   public executeApplyPainterStyle: CommandAdapt['applyPainterStyle']
   public executeFormat: CommandAdapt['format']
@@ -118,6 +119,7 @@ export class Command {
   public executeSetZone: CommandAdapt['setZone']
   public executeSetControlValue: CommandAdapt['setControlValue']
   public executeSetControlValueList: CommandAdapt['setControlValueList']
+  public executeClearAnnotation: CommandAdapt['clearAnnotation']
   public executeSetControlExtension: CommandAdapt['setControlExtension']
   public executeSetControlExtensionList: CommandAdapt['setControlExtensionList']
   public executeSetControlProperties: CommandAdapt['setControlProperties']
@@ -127,6 +129,8 @@ export class Command {
   public executeValidate: CommandAdapt['validate']
   public executeClearValidate: CommandAdapt['clearValidate']
   public executeLocationControl: CommandAdapt['locationControl']
+  public executeScrollToPlaceholder: CommandAdapt['scrollToPlaceholder']
+  public getDistinctPlaceholders: CommandAdapt['getDistinctPlaceholders']
   public executeInsertControl: CommandAdapt['insertControl']
   public executeJumpControl: CommandAdapt['jumpControl']
   public executeUpdateOptions: CommandAdapt['updateOptions']
@@ -161,6 +165,8 @@ export class Command {
   public getGroupRectList: CommandAdapt['getGroupRectList']
   public getControlValue: CommandAdapt['getControlValue']
   public getControlList: CommandAdapt['getControlList']
+  public setAllControlsEditable: CommandAdapt['setAllControlsEditable']
+  public setControlsEditableByPlaceholders: CommandAdapt['setControlsEditableByPlaceholders']
   public getControlsValue: CommandAdapt['getControlsValue']
   public replaceControlValue: CommandAdapt['replaceControlValue']
   public setChildTable: CommandAdapt['setChildTable']
@@ -225,6 +231,10 @@ export class Command {
     // 撤销、重做、格式刷、清除格式
     this.executeUndo = this.wrap('executeUndo', adapt.undo.bind(adapt))
     this.executeRedo = this.wrap('executeRedo', adapt.redo.bind(adapt))
+    this.executeClearHistory = this.wrap(
+      'executeClearHistory',
+      adapt.clearHistory.bind(adapt)
+    )
     this.executePainter = this.wrap('executePainter', adapt.painter.bind(adapt))
     this.executeApplyPainterStyle = this.wrap(
       'executeApplyPainterStyle',
@@ -623,6 +633,7 @@ export class Command {
     this.getGroupIds = adapt.getGroupIds.bind(adapt)
     this.getGroupRectList = adapt.getGroupRectList.bind(adapt)
     this.getContainer = adapt.getContainer.bind(adapt)
+    this.getDistinctPlaceholders = adapt.getDistinctPlaceholders.bind(adapt)
     this.getTitleValue = adapt.getTitleValue.bind(adapt)
     this.getPositionContextByEvent = adapt.getPositionContextByEvent.bind(adapt)
     this.getPositionContext = adapt.getPositionContext.bind(adapt)
@@ -636,6 +647,10 @@ export class Command {
     this.executeSetControlValueList = this.wrap(
       'executeSetControlValueList',
       adapt.setControlValueList.bind(adapt)
+    )
+    this.executeClearAnnotation = this.wrap(
+      'executeClearAnnotation',
+      adapt.clearAnnotation.bind(adapt)
     )
     this.executeSetControlExtension = this.wrap(
       'executeSetControlExtension',
@@ -671,6 +686,9 @@ export class Command {
     )
     this.getControlValue = adapt.getControlValue.bind(adapt)
     this.getControlList = adapt.getControlList.bind(adapt)
+    this.setAllControlsEditable = adapt.setAllControlsEditable.bind(adapt)
+    this.setControlsEditableByPlaceholders =
+      adapt.setControlsEditableByPlaceholders.bind(adapt)
     this.getControlsValue = adapt.getControlsValue.bind(adapt)
     this.replaceControlValue = adapt.replaceControlValue.bind(adapt)
     this.setChildTable = adapt.setChildTable.bind(adapt)
@@ -680,6 +698,10 @@ export class Command {
     this.executeLocationControl = this.wrap(
       'executeLocationControl',
       adapt.locationControl.bind(adapt)
+    )
+    this.executeScrollToPlaceholder = this.wrap(
+      'executeScrollToPlaceholder',
+      adapt.scrollToPlaceholder.bind(adapt)
     )
     this.executeInsertControl = this.wrap(
       'executeInsertControl',

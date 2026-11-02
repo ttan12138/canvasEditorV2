@@ -9,6 +9,7 @@ const editorOptions: any = {
   width: 800,
   height: 1000,
   margins: [80, 100, 80, 100],
+  background: { color: '#ffffff' },
   control: {
     prefix: '【',
     postfix: '】',

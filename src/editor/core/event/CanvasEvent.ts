@@ -42,8 +42,15 @@ export class CanvasEvent {
   public cachePositionList: IElementPosition[] | null
   public cachePositionContext: IPositionContext | null
   public mouseDownStartPosition: ICurrentPosition | null
-  /** 需求 4.1：控件内图片拖拽排序状态（mousedown 记录源序位，mouseup 消费交换） */
-  public controlImageDrag: { controlId: string; sourceOrder: number } | null
+  /** 需求 4.1/4.5：控件内图片拖拽状态（mousedown 记录源序位，mouseup 消费交换/排序） */
+  public controlImageDrag: {
+    controlId: string
+    sourceOrder: number
+    /** 需求 4.1：是否允许拖拽调整顺序（外 20% 区域） */
+    canReorder: boolean
+    /** 需求 4.5：是否允许拖拽交换位置（中间 60% 区域） */
+    canSwap: boolean
+  } | null
 
   private draw: Draw
   private pageContainer: HTMLDivElement

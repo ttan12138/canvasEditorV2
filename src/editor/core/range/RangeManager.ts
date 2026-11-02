@@ -136,7 +136,8 @@ export class RangeManager {
       }
       return elementList
     }
-    return this.getSelection()
+    const sel = this.getSelection()
+    return sel
   }
 
   public getTextLikeSelection(): IElement[] | null {

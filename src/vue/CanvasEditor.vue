@@ -13,12 +13,23 @@ import EditorDebug from './EditorDebug.vue'
 import EditorToolbar from './EditorToolbar.vue'
 import {
   getPlaceholderTextControls,
+  getPlaceholderTextControlMap,
   setControlValueByPlaceholder,
   setControlValuesByPlaceholder,
+  setControlContentByPlaceholder,
+  clearControlValueByPlaceholder,
+  clearControlValuesByPlaceholder,
+  setControlEditableByPlaceholder,
+  setAllControlEditable,
+  setControlsEditableByPlaceholders,
+  setImageControlConfigForAll,
+  setImageControlConfigByPlaceholder,
   type IReplaceControlPayload,
+  type ISetControlContentByPlaceholderPayload,
   type ISetChildTablePayload,
   type ISetCellConfigPayload,
-  type ITableCellInfo
+  type ITableCellInfo,
+  type IImageControlConfig
 } from './control'
 import type { EditorEmits } from './types'
 import { useCanvasEditor } from './useCanvasEditor'
@@ -130,6 +141,9 @@ defineExpose({
   /** 需求3：获取所有带 placeholder 的文本控件值 */
   getPlaceholderTextControls: () =>
     editor.value ? getPlaceholderTextControls(editor.value.command) : [],
+  /** 需求3（补充）：以对象形式返回带 placeholder 的文本控件值 { [占位符]: 内容 } */
+  getPlaceholderTextControlMap: () =>
+    editor.value ? getPlaceholderTextControlMap(editor.value.command) : {},
   /** 需求4/5：按 placeholder 查找并替换控件值（支持文本/图片，单元格自适应） */
   setControlValueByPlaceholder: (payload: IReplaceControlPayload) =>
     editor.value
@@ -140,6 +154,60 @@ defineExpose({
     editor.value
       ? setControlValuesByPlaceholder(editor.value.command, payloads)
       : Promise.resolve(),
+  /** 需求19：基于 placeholder 设置带临时批注样式的内容（mode: 0=直接替换, 1=末尾追加, 2=光标处追加,光标不在占位符内时回退到1） */
+  setControlContentByPlaceholder: (
+    payload: ISetControlContentByPlaceholderPayload
+  ) =>
+    editor.value
+      ? setControlContentByPlaceholder(editor.value.command, payload)
+      : undefined,
+  /** 需求19（补充）：按 placeholder 清空单个控件值，返回命中控件数量 */
+  clearControlValueByPlaceholder: (name: string) =>
+    editor.value
+      ? clearControlValueByPlaceholder(editor.value.command, name)
+      : 0,
+  /** 需求19（补充）：按 placeholders 批量清空控件值，返回命中控件总数量 */
+  clearControlValuesByPlaceholder: (names: string[]) =>
+    editor.value
+      ? clearControlValuesByPlaceholder(editor.value.command, names)
+      : 0,
+  /** 需求11：表单模式按占位符（单个或数组）设置控件可编辑/不可编辑，返回命中数量 */
+  setControlEditableByPlaceholder: (name: string | string[], editable: boolean) =>
+    editor.value
+      ? setControlEditableByPlaceholder(editor.value.command, name, editable)
+      : 0,
+  /** 需求11（补充）：表单模式设置全部占位符控件可编辑/不可编辑，返回命中数量 */
+  setAllControlEditable: (editable: boolean) =>
+    editor.value ? setAllControlEditable(editor.value.command, editable) : 0,
+  /** 需求11（补充）：表单模式按多个占位符设置控件可编辑/不可编辑，返回命中数量 */
+  setControlsEditableByPlaceholders: (
+    names: string[],
+    editable: boolean
+  ) =>
+    editor.value
+      ? setControlsEditableByPlaceholders(
+          editor.value.command,
+          names,
+          editable
+        )
+      : 0,
+  /** 需求12.1：统一设置所有图片控件的删除/拖拽能力，返回命中图片控件数量 */
+  setImageControlConfigForAll: (config: IImageControlConfig) =>
+    editor.value
+      ? setImageControlConfigForAll(editor.value.command, config)
+      : 0,
+  /** 需求12.2：按占位符（单个或数组）设置图片控件的删除/拖拽能力，返回命中数量 */
+  setImageControlConfigByPlaceholder: (
+    name: string | string[],
+    config: IImageControlConfig
+  ) =>
+    editor.value
+      ? setImageControlConfigByPlaceholder(
+          editor.value.command,
+          name,
+          config
+        )
+      : 0,
   /** 护眼模式：enabled=true 时文档背景 #cfe8cc、文档外空白区 #d7e7da */
   setEyeCareMode,
   /** 需求18：直接设置缩放比例（如 0.8 / 1.5 / 2，单位与 100% 对应 1） */
@@ -201,7 +269,9 @@ defineExpose({
 }
 
 /* 护眼模式：文档以外的空白区域使用 #d7e7da（文档本身底色由 background.color 控制） */
-.canvas-editor.eye-care {
+.canvas-editor.eye-care,
+.canvas-editor.eye-care .canvas-editor__body,
+.canvas-editor.eye-care .canvas-editor__container {
   background-color: #d7e7da;
 }
 

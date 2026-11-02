@@ -146,6 +146,15 @@ export const imageMenus: IRegisterContextMenu[] = [
       const el = payload.startElement
       if (!el || el.type !== ElementType.IMAGE || !el.controlId) return false
       if (!payload.isReadonly && !payload.isFormMode) return false
+      // 需求 11：控件不可编辑时禁止删除图片
+      if (payload.editable === false) return false
+      console.log(
+        '[deleteGate] controlId=%s editable=%s imageCanDelete=%s canDelete=%s',
+        el.controlId,
+        payload.editable,
+        payload.imageCanDelete,
+        el.canDelete
+      )
       // 控件级 imageCanDelete 优先（图片级 canDelete 会被 formatElementList 剥离），默认不可删
       if (payload.imageCanDelete !== undefined) return payload.imageCanDelete
       if (el.canDelete !== undefined) return el.canDelete

@@ -119,6 +119,7 @@ import {
   cloneProperty,
   deepClone,
   downloadFile,
+  findScrollContainer,
   getUUID,
   isNumber,
   isObjectEqual
@@ -371,6 +372,11 @@ export class CommandAdapt {
     this.historyManager.redo()
   }
 
+  // 清空当前的可撤销/重做堆栈（需求：提供清空撤销栈接口）
+  public clearHistory() {
+    this.historyManager.recovery()
+  }
+
   public painter(options: IPainterOption) {
     // 如果单击且已经有样式设置则取消设置
     if (!options.isDblclick && this.draw.getPainterStyle()) {
@@ -401,12 +407,32 @@ export class CommandAdapt {
     this.canvasEvent.applyPainterStyle()
   }
 
+  // 表单模式下，满足以下任一条件即允许施加字符格式：
+  // 1) 选区落在同一控件内（允许 POSTFIX 锚点）；
+  // 2) 选区完整包含至少一个控件（全选 / 包裹控件场景）。
+  // 仅当不是“真正禁用”（禁用单元格 / 选区含禁用控件元素）时才放行，避免放宽表单模式约定。
+  private isFormatAllowedInFormMode(): boolean {
+    if (this.draw.getMode() !== EditorMode.FORM) return false
+    const control = this.draw.getControl()
+    return (
+      control.getIsRangeWithinControlIgnorePostfix() ||
+      control.isSelectionContainsFullControl()
+    )
+  }
+
   public format(options?: IRichtextOption) {
     const { isIgnoreDisabledRule = false } = options || {}
-    const isDisabled =
-      !isIgnoreDisabledRule &&
-      (this.draw.isReadonly() || this.draw.isDisabled())
-    if (isDisabled) return
+    const isReadonly = this.draw.isReadonly()
+    const isDisabledDraw = this.draw.isDisabled()
+    const isDisabled = !isIgnoreDisabledRule && (isReadonly || isDisabledDraw)
+    if (isDisabled) {
+      // 表单模式下，选区落在同一控件内（含 POSTFIX 锚点）允许字符格式化
+      const allowByFormControl =
+        this.draw.getMode() === EditorMode.FORM &&
+        !isDisabledDraw &&
+        this.isFormatAllowedInFormMode()
+      if (!allowByFormControl) return
+    }
     const selection = this.range.getSelectionElementList()
     // 选区设置或设置换行处样式
     let renderOption: IDrawOption = {}
@@ -435,10 +461,17 @@ export class CommandAdapt {
 
   public font(payload: string, options?: IRichtextOption) {
     const { isIgnoreDisabledRule = false } = options || {}
-    const isDisabled =
-      !isIgnoreDisabledRule &&
-      (this.draw.isReadonly() || this.draw.isDisabled())
-    if (isDisabled) return
+    const isReadonly = this.draw.isReadonly()
+    const isDisabledDraw = this.draw.isDisabled()
+    const isDisabled = !isIgnoreDisabledRule && (isReadonly || isDisabledDraw)
+    if (isDisabled) {
+      // 表单模式下，选区落在同一控件内（含 POSTFIX 锚点）允许字符格式化
+      const allowByFormControl =
+        this.draw.getMode() === EditorMode.FORM &&
+        !isDisabledDraw &&
+        this.isFormatAllowedInFormMode()
+      if (!allowByFormControl) return
+    }
     const selection = this.range.getSelectionElementList()
     if (selection?.length) {
       selection.forEach(el => {
@@ -469,10 +502,17 @@ export class CommandAdapt {
 
   public size(payload: number, options?: IRichtextOption) {
     const { isIgnoreDisabledRule = false } = options || {}
-    const isDisabled =
-      !isIgnoreDisabledRule &&
-      (this.draw.isReadonly() || this.draw.isDisabled())
-    if (isDisabled) return
+    const isReadonly = this.draw.isReadonly()
+    const isDisabledDraw = this.draw.isDisabled()
+    const isDisabled = !isIgnoreDisabledRule && (isReadonly || isDisabledDraw)
+    if (isDisabled) {
+      // 表单模式下，选区落在同一控件内（含 POSTFIX 锚点）允许字符格式化
+      const allowByFormControl =
+        this.draw.getMode() === EditorMode.FORM &&
+        !isDisabledDraw &&
+        this.isFormatAllowedInFormMode()
+      if (!allowByFormControl) return
+    }
     const { minSize, maxSize, defaultSize } = this.options
     if (payload < minSize || payload > maxSize) return
     // 选区设置或设置换行处样式
@@ -520,10 +560,17 @@ export class CommandAdapt {
 
   public sizeAdd(options?: IRichtextOption) {
     const { isIgnoreDisabledRule = false } = options || {}
-    const isDisabled =
-      !isIgnoreDisabledRule &&
-      (this.draw.isReadonly() || this.draw.isDisabled())
-    if (isDisabled) return
+    const isReadonly = this.draw.isReadonly()
+    const isDisabledDraw = this.draw.isDisabled()
+    const isDisabled = !isIgnoreDisabledRule && (isReadonly || isDisabledDraw)
+    if (isDisabled) {
+      // 表单模式下，选区落在同一控件内（含 POSTFIX 锚点）允许字符格式化
+      const allowByFormControl =
+        this.draw.getMode() === EditorMode.FORM &&
+        !isDisabledDraw &&
+        this.isFormatAllowedInFormMode()
+      if (!allowByFormControl) return
+    }
     const { defaultSize, maxSize } = this.options
     const selection = this.range.getTextLikeSelectionElementList()
     // 选区设置或设置换行处样式
@@ -575,10 +622,17 @@ export class CommandAdapt {
 
   public sizeMinus(options?: IRichtextOption) {
     const { isIgnoreDisabledRule = false } = options || {}
-    const isDisabled =
-      !isIgnoreDisabledRule &&
-      (this.draw.isReadonly() || this.draw.isDisabled())
-    if (isDisabled) return
+    const isReadonly = this.draw.isReadonly()
+    const isDisabledDraw = this.draw.isDisabled()
+    const isDisabled = !isIgnoreDisabledRule && (isReadonly || isDisabledDraw)
+    if (isDisabled) {
+      // 表单模式下，选区落在同一控件内（含 POSTFIX 锚点）允许字符格式化
+      const allowByFormControl =
+        this.draw.getMode() === EditorMode.FORM &&
+        !isDisabledDraw &&
+        this.isFormatAllowedInFormMode()
+      if (!allowByFormControl) return
+    }
     const { defaultSize, minSize } = this.options
     const selection = this.range.getTextLikeSelectionElementList()
     // 选区设置或设置换行处样式
@@ -629,10 +683,17 @@ export class CommandAdapt {
 
   public bold(options?: IRichtextOption) {
     const { isIgnoreDisabledRule = false } = options || {}
-    const isDisabled =
-      !isIgnoreDisabledRule &&
-      (this.draw.isReadonly() || this.draw.isDisabled())
-    if (isDisabled) return
+    const isReadonly = this.draw.isReadonly()
+    const isDisabledDraw = this.draw.isDisabled()
+    const isDisabled = !isIgnoreDisabledRule && (isReadonly || isDisabledDraw)
+    if (isDisabled) {
+      // 表单模式下，选区落在同一控件内（含 POSTFIX 锚点）允许字符格式化
+      const allowByFormControl =
+        this.draw.getMode() === EditorMode.FORM &&
+        !isDisabledDraw &&
+        this.isFormatAllowedInFormMode()
+      if (!allowByFormControl) return
+    }
     const selection = this.range.getSelectionElementList()
     if (selection?.length) {
       const noBoldIndex = selection.findIndex(s => !s.bold)
@@ -664,10 +725,17 @@ export class CommandAdapt {
 
   public italic(options?: IRichtextOption) {
     const { isIgnoreDisabledRule = false } = options || {}
-    const isDisabled =
-      !isIgnoreDisabledRule &&
-      (this.draw.isReadonly() || this.draw.isDisabled())
-    if (isDisabled) return
+    const isReadonly = this.draw.isReadonly()
+    const isDisabledDraw = this.draw.isDisabled()
+    const isDisabled = !isIgnoreDisabledRule && (isReadonly || isDisabledDraw)
+    if (isDisabled) {
+      // 表单模式下，选区落在同一控件内（含 POSTFIX 锚点）允许字符格式化
+      const allowByFormControl =
+        this.draw.getMode() === EditorMode.FORM &&
+        !isDisabledDraw &&
+        this.isFormatAllowedInFormMode()
+      if (!allowByFormControl) return
+    }
     const selection = this.range.getSelectionElementList()
     if (selection?.length) {
       const noItalicIndex = selection.findIndex(s => !s.italic)
@@ -702,10 +770,17 @@ export class CommandAdapt {
     options?: IRichtextOption
   ) {
     const { isIgnoreDisabledRule = false } = options || {}
-    const isDisabled =
-      !isIgnoreDisabledRule &&
-      (this.draw.isReadonly() || this.draw.isDisabled())
-    if (isDisabled) return
+    const isReadonly = this.draw.isReadonly()
+    const isDisabledDraw = this.draw.isDisabled()
+    const isDisabled = !isIgnoreDisabledRule && (isReadonly || isDisabledDraw)
+    if (isDisabled) {
+      // 表单模式下，选区落在同一控件内（含 POSTFIX 锚点）允许字符格式化
+      const allowByFormControl =
+        this.draw.getMode() === EditorMode.FORM &&
+        !isDisabledDraw &&
+        this.isFormatAllowedInFormMode()
+      if (!allowByFormControl) return
+    }
     const selection = this.range.getSelectionElementList()
     if (selection?.length) {
       // 没有设置下划线、当前与之前有一个设置不存在、文本装饰不一致时重设下划线
@@ -756,10 +831,17 @@ export class CommandAdapt {
 
   public strikeout(options?: IRichtextOption) {
     const { isIgnoreDisabledRule = false } = options || {}
-    const isDisabled =
-      !isIgnoreDisabledRule &&
-      (this.draw.isReadonly() || this.draw.isDisabled())
-    if (isDisabled) return
+    const isReadonly = this.draw.isReadonly()
+    const isDisabledDraw = this.draw.isDisabled()
+    const isDisabled = !isIgnoreDisabledRule && (isReadonly || isDisabledDraw)
+    if (isDisabled) {
+      // 表单模式下，选区落在同一控件内（含 POSTFIX 锚点）允许字符格式化
+      const allowByFormControl =
+        this.draw.getMode() === EditorMode.FORM &&
+        !isDisabledDraw &&
+        this.isFormatAllowedInFormMode()
+      if (!allowByFormControl) return
+    }
     const selection = this.range.getSelectionElementList()
     if (selection?.length) {
       const noStrikeoutIndex = selection.findIndex(s => !s.strikeout)
@@ -796,10 +878,17 @@ export class CommandAdapt {
 
   public superscript(options?: IRichtextOption) {
     const { isIgnoreDisabledRule = false } = options || {}
-    const isDisabled =
-      !isIgnoreDisabledRule &&
-      (this.draw.isReadonly() || this.draw.isDisabled())
-    if (isDisabled) return
+    const isReadonly = this.draw.isReadonly()
+    const isDisabledDraw = this.draw.isDisabled()
+    const isDisabled = !isIgnoreDisabledRule && (isReadonly || isDisabledDraw)
+    if (isDisabled) {
+      // 表单模式下，选区落在同一控件内（含 POSTFIX 锚点）允许字符格式化
+      const allowByFormControl =
+        this.draw.getMode() === EditorMode.FORM &&
+        !isDisabledDraw &&
+        this.isFormatAllowedInFormMode()
+      if (!allowByFormControl) return
+    }
     const selection = this.range.getSelectionElementList()
     if (!selection) return
     const superscriptIndex = selection.findIndex(
@@ -828,10 +917,17 @@ export class CommandAdapt {
 
   public subscript(options?: IRichtextOption) {
     const { isIgnoreDisabledRule = false } = options || {}
-    const isDisabled =
-      !isIgnoreDisabledRule &&
-      (this.draw.isReadonly() || this.draw.isDisabled())
-    if (isDisabled) return
+    const isReadonly = this.draw.isReadonly()
+    const isDisabledDraw = this.draw.isDisabled()
+    const isDisabled = !isIgnoreDisabledRule && (isReadonly || isDisabledDraw)
+    if (isDisabled) {
+      // 表单模式下，选区落在同一控件内（含 POSTFIX 锚点）允许字符格式化
+      const allowByFormControl =
+        this.draw.getMode() === EditorMode.FORM &&
+        !isDisabledDraw &&
+        this.isFormatAllowedInFormMode()
+      if (!allowByFormControl) return
+    }
     const selection = this.range.getSelectionElementList()
     if (!selection) return
     const subscriptIndex = selection.findIndex(
@@ -860,10 +956,17 @@ export class CommandAdapt {
 
   public color(payload: string | null, options?: IRichtextOption) {
     const { isIgnoreDisabledRule = false } = options || {}
-    const isDisabled =
-      !isIgnoreDisabledRule &&
-      (this.draw.isReadonly() || this.draw.isDisabled())
-    if (isDisabled) return
+    const isReadonly = this.draw.isReadonly()
+    const isDisabledDraw = this.draw.isDisabled()
+    const isDisabled = !isIgnoreDisabledRule && (isReadonly || isDisabledDraw)
+    if (isDisabled) {
+      // 表单模式下，选区落在同一控件内（含 POSTFIX 锚点）允许字符格式化
+      const allowByFormControl =
+        this.draw.getMode() === EditorMode.FORM &&
+        !isDisabledDraw &&
+        this.isFormatAllowedInFormMode()
+      if (!allowByFormControl) return
+    }
     const selection = this.range.getSelectionElementList()
     if (selection?.length) {
       selection.forEach(el => {
@@ -905,10 +1008,17 @@ export class CommandAdapt {
 
   public highlight(payload: string | null, options?: IRichtextOption) {
     const { isIgnoreDisabledRule = false } = options || {}
-    const isDisabled =
-      !isIgnoreDisabledRule &&
-      (this.draw.isReadonly() || this.draw.isDisabled())
-    if (isDisabled) return
+    const isReadonly = this.draw.isReadonly()
+    const isDisabledDraw = this.draw.isDisabled()
+    const isDisabled = !isIgnoreDisabledRule && (isReadonly || isDisabledDraw)
+    if (isDisabled) {
+      // 表单模式下，选区落在同一控件内（含 POSTFIX 锚点）允许字符格式化
+      const allowByFormControl =
+        this.draw.getMode() === EditorMode.FORM &&
+        !isDisabledDraw &&
+        this.isFormatAllowedInFormMode()
+      if (!allowByFormControl) return
+    }
     const selection = this.range.getSelectionElementList()
     if (selection?.length) {
       selection.forEach(el => {
@@ -1542,12 +1652,12 @@ export class CommandAdapt {
   // 生成当前文档的 PDF 文档实例（逐页以 JPEG 编码，体积小、合成快）
   // preview=true 时使用较低像素比，适合快速预览
   private async buildPdfDoc(preview = false): Promise<jsPDF> {
+    // 需求19：打印前清除临时批注样式（避免临时样式进入打印/PDF 输出）
+    this.draw.clearAnnotationStyles()
     const { scale, printPixelRatio, paperDirection, width, height } =
       this.options
     // 预览走较低像素比，显著缩短渲染与合成耗时
-    const ratio = preview
-      ? Math.min(2, printPixelRatio)
-      : printPixelRatio
+    const ratio = preview ? Math.min(2, printPixelRatio) : printPixelRatio
     if (scale !== 1) {
       this.draw.setPageScale(1)
     }
@@ -1684,6 +1794,8 @@ export class CommandAdapt {
   }
 
   public getValue(options?: IGetValueOption): IEditorResult {
+    // 需求19：获取值前清除临时批注样式（避免临时样式进入导出数据）
+    this.draw.clearAnnotationStyles()
     return this.draw.getValue(options)
   }
 
@@ -2336,9 +2448,13 @@ export class CommandAdapt {
 
   /**
    * 需求 8.5：按单元格 name 更新子表数据。
-   * data 行数 = 【表数据】行数；写入后触发联动重算与重绘。
+   * data 行数 = 【表数据】行数；支持二维数组与对象数组两种形式（对象数组按表头 key 映射）。
+   * 写入后触发联动重算与重绘。
    */
-  public setChildTable(payload: { name: string; data: unknown[][] }): void {
+  public setChildTable(payload: {
+    name: string
+    data: unknown[][] | Record<string, unknown>[]
+  }): void {
     const { name, data } = payload
     const mode = this.draw.getMode()
     // 需求 8.5 / 8.1.3 / 8.4.2：仅表单、只读模式承载并写入子表数据；
@@ -2374,10 +2490,21 @@ export class CommandAdapt {
     return null
   }
 
-  private _applyChildTable(td: ITd, data: unknown[][]): void {
+  private _applyChildTable(
+    td: ITd,
+    data: unknown[][] | Record<string, unknown>[]
+  ): void {
     const structure = td.childTables
     if (!structure || !structure.header?.length) return
-    td.childData = data
+    const header = structure.header
+    // 对象数组：每条对象 key 需与子表表头 key 匹配，按表头 key 顺序映射为行（缺失 key 取空值）
+    const normalized: unknown[][] =
+      data.length && !Array.isArray(data[0])
+        ? (data as Record<string, unknown>[]).map(obj =>
+            header.map(col => obj?.[col.key])
+          )
+        : (data as unknown[][])
+    td.childData = normalized
     td.hasChild = true
     this._rebuildTdValue(td)
   }
@@ -2799,6 +2926,12 @@ export class CommandAdapt {
     this.draw.getControl().setValueListById(payload)
   }
 
+  // 需求19：清除所有临时批注样式（setControlContentByPlaceholder 追加的内容），并触发重绘
+  public clearAnnotation() {
+    this.draw.clearAnnotationStyles()
+    this.draw.render({ isSubmitHistory: false })
+  }
+
   // 需求 3：获取所有带 placeholder 的文本控件值
   public getControlsValue(): IControlPlaceholderValue[] {
     return this.draw.getControl().getControlsValue()
@@ -2914,6 +3047,142 @@ export class CommandAdapt {
 
   public getControlList(): IElement[] {
     return this.draw.getControl().getList()
+  }
+
+  /**
+   * 需求 11：设置【全部】控件的可编辑状态。
+   * 直接遍历文档内（含表格单元格）所有控件对象上的 control.editable，
+   * 不依赖 controlId——模板加载初期 controlId 尚未分配时 getControlList 可能返回空，
+   * 但初始化展开后会复用同一个 control 对象引用，因此此处写入的 editable 会在渲染后生效。
+   * @returns 命中的控件数量
+   */
+  // 需求 11：记录“全部控件可编辑”的期望状态（sticky）。
+  // 文档（重新）加载会重建控件对象导致 editable 被重置，因此每次内容变化后按此值持续重设，
+  // 使只读锁定在 setData 重载后依然生效。最后一次调用决定最终值（last-call-wins）。
+  private _desiredAllEditable: boolean | null = null
+  private _allEditableStickyBound = false
+
+  public setAllControlsEditable(editable: boolean): number {
+    this._desiredAllEditable = editable
+    const count = this._applyAllEditable(editable)
+    this._ensureAllEditableSticky()
+    console.log(
+      '[setAllControlsEditable] editable=%s immediateCount=%d',
+      editable,
+      count
+    )
+    return count
+  }
+
+  private _applyAllEditable(editable: boolean): number {
+    // 注意：getMainElementList() 是位置上下文敏感的（光标在表格内时只返回当前单元格
+    // 的 td.value），会导致遍历漏掉大量控件。主列表必须用 getOriginalMainElementList()。
+    const lists: IElement[][] = [
+      this.draw.getHeader().getElementList(),
+      this.draw.getOriginalMainElementList(),
+      this.draw.getFooter().getElementList()
+    ]
+    let count = 0
+    let changed = 0
+    const walk = (elementList: IElement[]) => {
+      for (const element of elementList) {
+        if (element.type === ElementType.TABLE && element.trList) {
+          for (const tr of element.trList) {
+            for (const td of tr.tdList) {
+              walk(td.value)
+            }
+          }
+        }
+        if (element.control) {
+          count++
+          if (element.control.editable !== editable) {
+            element.control.editable = editable
+            changed++
+          }
+        }
+      }
+    }
+    for (const list of lists) walk(list)
+    // 仅在实际发生变化时重渲染，避免每次内容变化都触发无谓刷新
+    if (changed) this.forceUpdate()
+    return count
+  }
+
+  private _ensureAllEditableSticky(): void {
+    if (this._allEditableStickyBound) return
+    this._allEditableStickyBound = true
+    const handler = () => {
+      if (this._desiredAllEditable === null) {
+        this.draw.getEventBus().off('contentChange', handler)
+        this._allEditableStickyBound = false
+        return
+      }
+      // 文档重载（setData）后控件对象被重建，editable 被重置，此处按 sticky 值重设
+      this._applyAllEditable(this._desiredAllEditable)
+    }
+    this.draw.getEventBus().on('contentChange', handler)
+  }
+
+  /**
+   * 需求 11：按占位符集合设置控件可编辑状态（不依赖 controlId，直接遍历文档设置）。
+   * @returns 命中的控件数量
+   */
+  public setControlsEditableByPlaceholders(
+    placeholders: string[],
+    editable: boolean
+  ): number {
+    const names = new Set(placeholders)
+    const apply = (): number => {
+      const lists: IElement[][] = [
+        this.draw.getHeader().getElementList(),
+        this.draw.getOriginalMainElementList(),
+        this.draw.getFooter().getElementList()
+      ]
+      let count = 0
+      const walk = (elementList: IElement[]) => {
+        for (const element of elementList) {
+          if (element.type === ElementType.TABLE && element.trList) {
+            for (const tr of element.trList) {
+              for (const td of tr.tdList) {
+                walk(td.value)
+              }
+            }
+          }
+          if (
+            element.control &&
+            element.control.placeholder &&
+            names.has(element.control.placeholder)
+          ) {
+            element.control.editable = editable
+            count++
+          }
+        }
+      }
+      for (const list of lists) walk(list)
+      if (count) this.forceUpdate()
+      return count
+    }
+    const count = apply()
+    if (count) return count
+    // 与 setAllControlsEditable 同理：文档未加载时延迟到 contentChange 后再试
+    const eventBus = this.draw.getEventBus()
+    let tries = 0
+    const retry = () => {
+      if (tries++ >= 5) {
+        eventBus.off('contentChange', retry)
+        return
+      }
+      const c = apply()
+      console.log(
+        '[setControlsEditableByPlaceholders] retry editable=%s count=%d try=%d',
+        editable,
+        c,
+        tries
+      )
+      if (c) eventBus.off('contentChange', retry)
+    }
+    eventBus.on('contentChange', retry)
+    return count
   }
 
   public locationControl(controlId: string, options?: ILocationControlOption) {
@@ -3064,6 +3333,116 @@ export class CommandAdapt {
     this.draw.getControl().initNextControl({
       direction: payload?.direction
     })
+  }
+
+  // 需求 21：按占位符滚动聚焦到其所在行。
+  // 不传 placeholder 时，从 options.focusPlaceholder 读取配置（并受 modes 模式门控）；
+  // 传入 placeholder 时直接使用（用于工具栏手动触发，跳过模式门控）。
+  public scrollToPlaceholder(placeholder?: string, isFocus = true): boolean {
+    const focusCfg = this.options.focusPlaceholder
+    const targetPlaceholder = placeholder || focusCfg?.placeholder
+    if (!targetPlaceholder) {
+      return false
+    }
+    // 仅当从 option 读取（未显式传入）且配置了 modes 时，按当前模式门控
+    if (
+      !placeholder &&
+      focusCfg?.modes &&
+      focusCfg.modes.length > 0 &&
+      !focusCfg.modes.includes(this.draw.getMode())
+    ) {
+      return false
+    }
+    // 是否聚焦：显式传参时用参数；从 option 读取时用配置（默认 true）
+    const resolvedFocus = placeholder ? isFocus : (focusCfg?.isFocus ?? true)
+    const controlId = this.draw
+      .getControl()
+      .getControlIdByPlaceholder(targetPlaceholder)
+    if (!controlId) {
+      return false
+    }
+    // 定位 zone/context/range（locationControl 基于原始列表定位，下面用渲染列表校正）
+    this.locationControl(controlId)
+    // 用「当前渲染元素列表」查找控件索引，确保与重算后的 positionList 对齐
+    // （locationControl 基于原始元素列表定位，其索引可能与渲染后 positionList 错位，
+    //  尤其是表格单元格内控件：表格 setCursor 走 getTableTdByContext(...).positionList[curIndex]）
+    const elementList = this.draw.getElementList()
+    let targetIndex = -1
+    for (let i = 0; i < elementList.length; i++) {
+      const el = elementList[i]
+      if (el.controlId !== controlId) continue
+      if (
+        el.controlComponent === ControlComponent.PREFIX ||
+        el.controlComponent === ControlComponent.PRE_TEXT
+      ) {
+        targetIndex = i
+        break
+      }
+      if (targetIndex === -1) targetIndex = i
+    }
+    if (targetIndex >= 0) {
+      this.range.replaceRange({
+        startIndex: targetIndex,
+        endIndex: targetIndex
+      })
+    }
+    // 强制全量重算，刷新 positionList（含表格单元格）；isFocus 透传以控制是否聚焦
+    this.draw.render({
+      curIndex:
+        targetIndex >= 0 ? targetIndex : this.range.getRange().startIndex,
+      isCompute: true,
+      isSetCursor: true,
+      isSubmitHistory: false,
+      isFocus: resolvedFocus
+    })
+    // 取重算后的光标坐标（setCursor 已按 zone/表格上下文正确设定），优先用光标坐标，
+    // 回退到 positionList[targetIndex]，避免列表/渲染索引错位取到错误坐标
+    const cursorPosition = this.position.getCursorPosition()
+    const positionList = this.position.getPositionList()
+    const fallbackPosition = targetIndex >= 0 ? positionList[targetIndex] : null
+    const targetPosition = cursorPosition || fallbackPosition
+    if (!targetPosition) {
+      return false
+    }
+    // 直接滚动：显式设置滚动容器 scrollTop，使目标上边缘对齐到滚动容器可视区上边缘
+    // （工具栏位于滚动容器之外，顶对齐即天然位于工具栏下方）。绕开 moveCursorToVisible 的「已在可视区」判定，保证一定能滚动到位
+    const scrollContainer = findScrollContainer(this.draw.getContainer())
+    const isDocumentScroll = scrollContainer === document.documentElement
+    const scRect = scrollContainer.getBoundingClientRect()
+    const pageOffset = this.draw.getPageOffset(targetPosition.pageNo).y
+    const targetTop = targetPosition.coordinate.leftTop[1]
+    let targetContentTop: number
+    if (isDocumentScroll) {
+      // 文档滚动：目标相对文档内容顶部的偏移 = 编辑器容器文档坐标 + 页偏移 + 元素偏移
+      const innerTopInDoc =
+        this.draw.getContainer().getBoundingClientRect().top +
+        document.documentElement.scrollTop
+      targetContentTop = innerTopInDoc + pageOffset + targetTop
+    } else {
+      // 容器滚动：编辑器容器即滚动容器的直接子元素，内容顶部偏移为 0，
+      // targetContentTop 即目标在滚动内容中的偏移；令 scrollTop = 该偏移即可顶对齐
+      targetContentTop = pageOffset + targetTop
+    }
+    // 期望 scrollTop = 目标内容偏移（顶对齐），并夹紧到 [0, 最大可滚动距离]
+    const maxScrollTop = Math.max(
+      0,
+      scrollContainer.scrollHeight - scRect.height
+    )
+    const desiredScrollTop = Math.min(
+      Math.max(0, targetContentTop),
+      maxScrollTop
+    )
+    scrollContainer.scrollTo({ top: desiredScrollTop })
+    // 聚焦（默认聚焦；resolvedFocus=false 时仅滚动不聚焦，render 已据 resolvedFocus 控制是否聚焦）
+    if (resolvedFocus) {
+      this.draw.getCursor().focus()
+    }
+    return true
+  }
+
+  // 需求 21：收集文档内去重占位符（用于工具栏选择聚焦目标）
+  public getDistinctPlaceholders(): string[] {
+    return this.draw.getControl().getDistinctPlaceholders()
   }
 
   public getContainer(): HTMLDivElement {
@@ -3285,6 +3664,8 @@ export class CommandAdapt {
   }
 
   public focus(payload?: IFocusOption) {
+    // 需求19：聚焦时清除临时批注样式（用户开始编辑即视为临时标注结束）
+    this.draw.clearAnnotationStyles()
     const {
       position = LocationPosition.AFTER,
       isMoveCursorToVisible = true,

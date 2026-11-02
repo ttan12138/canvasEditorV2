@@ -1,8 +1,18 @@
 import { Draw } from '../draw/Draw'
 
+interface HistoryEntry {
+  /** 恢复该检查点的函数 */
+  restore: Function
+  /**
+   * 该检查点对应的「可编辑占位符签名」。
+   * 与 historyRecordEditableOnly 配合：仅当签名相对上一检查点变化时才入栈。
+   */
+  sig: string
+}
+
 export class HistoryManager {
-  private undoStack: Array<Function> = []
-  private redoStack: Array<Function> = []
+  private undoStack: Array<HistoryEntry> = []
+  private redoStack: Array<HistoryEntry> = []
   private maxRecordCount: number
 
   constructor(draw: Draw) {
@@ -15,7 +25,7 @@ export class HistoryManager {
       const pop = this.undoStack.pop()!
       this.redoStack.push(pop)
       if (this.undoStack.length) {
-        this.undoStack[this.undoStack.length - 1]()
+        this.undoStack[this.undoStack.length - 1].restore()
       }
     }
   }
@@ -24,12 +34,12 @@ export class HistoryManager {
     if (this.redoStack.length) {
       const pop = this.redoStack.pop()!
       this.undoStack.push(pop)
-      pop()
+      pop.restore()
     }
   }
 
-  public execute(fn: Function) {
-    this.undoStack.push(fn)
+  public execute(fn: Function, sig = '') {
+    this.undoStack.push({ restore: fn, sig })
     if (this.redoStack.length) {
       this.redoStack = []
     }
@@ -56,6 +66,13 @@ export class HistoryManager {
   }
 
   public popUndo() {
-    return this.undoStack.pop()
+    const pop = this.undoStack.pop()
+    return pop?.restore
+  }
+
+  /** 当前撤销栈栈顶检查点的可编辑占位符签名（空栈返回 null） */
+  public getTopUndoSignature(): string | null {
+    if (!this.undoStack.length) return null
+    return this.undoStack[this.undoStack.length - 1].sig
   }
 }

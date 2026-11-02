@@ -58,7 +58,7 @@ import { IRow, IRowComputeState, IRowElement } from '../../interface/Row'
 import { IColumnLayout, IColumnOption } from '../../interface/Column'
 import { ColumnManager } from './column/ColumnManager'
 import { IncrementalRowComputer } from './IncrementalRowComputer'
-import { deepClone, nextTick } from '../../utils'
+import { deepClone, findScrollContainer, nextTick } from '../../utils'
 import { Cursor } from '../cursor/Cursor'
 import { CanvasEvent } from '../event/CanvasEvent'
 import { GlobalEvent } from '../event/GlobalEvent'
@@ -121,7 +121,16 @@ import {
   ControlComponent,
   ControlIndentation
 } from '../../dataset/enum/Control'
-import { formatElementList, refreshPlaceholderElements } from '../../utils/element'
+import {
+  formatElementList,
+  refreshPlaceholderElements
+} from '../../utils/element'
+import {
+  countImagesBeforeTarget,
+  getImagePadding,
+  substituteImageNo,
+  wrapCaptionLines
+} from '../../utils/caption'
 import { shrinkColgroupToWidth } from '../../utils/table'
 import { WorkerManager } from '../worker/WorkerManager'
 import { Previewer } from './particle/previewer/Previewer'
@@ -1484,7 +1493,34 @@ export class Draw {
     })
   }
 
-  public setPageScale(payload: number) {
+  public setPageScale(payload: number, anchorY?: number) {
+    const oldScale = this.options.scale
+    if (payload === oldScale) {
+      if (this.listener.pageScaleChange) {
+        this.listener.pageScaleChange(payload)
+      }
+      if (this.eventBus.isSubscribe('pageScaleChange')) {
+        this.eventBus.emit('pageScaleChange', payload)
+      }
+      return
+    }
+    // 记录缩放前的滚动状态：缩放后以锚点为中心还原视图位置，避免视图跳到顶部
+    const scrollContainer = findScrollContainer(this.container)
+    const isDocumentScroll = scrollContainer === document.documentElement
+    const viewTop = isDocumentScroll
+      ? window.scrollY
+      : (scrollContainer as HTMLElement).scrollTop
+    const viewHeight = isDocumentScroll
+      ? Math.max(document.documentElement.clientHeight, window.innerHeight)
+      : (scrollContainer as HTMLElement).clientHeight
+    const scrollHeightBefore = isDocumentScroll
+      ? document.documentElement.scrollHeight
+      : (scrollContainer as HTMLElement).scrollHeight
+    // 缩放中心：优先用调用方传入的锚点（通常为鼠标指针位置），否则取视图中心
+    const anchor = anchorY ?? viewTop + viewHeight / 2
+    const anchorRatio =
+      scrollHeightBefore > 0 ? anchor / scrollHeightBefore : 0
+
     this.options.scale = payload
     this._updatePageSizes()
     const cursorPosition = this.position.getCursorPosition()
@@ -1493,6 +1529,20 @@ export class Draw {
       isSetCursor: !!cursorPosition,
       curIndex: cursorPosition?.index
     })
+
+    // 缩放后以锚点为中心还原视图位置（内容整体按 scale 比例缩放，故锚点绝对位置同比缩放）
+    const scrollHeightAfter = isDocumentScroll
+      ? document.documentElement.scrollHeight
+      : (scrollContainer as HTMLElement).scrollHeight
+    let newScrollTop = anchorRatio * scrollHeightAfter - (anchor - viewTop)
+    const maxScrollTop = Math.max(0, scrollHeightAfter - viewHeight)
+    newScrollTop = Math.min(Math.max(0, newScrollTop), maxScrollTop)
+    if (isDocumentScroll) {
+      window.scrollTo({ top: newScrollTop })
+    } else {
+      ;(scrollContainer as HTMLElement).scrollTo({ top: newScrollTop })
+    }
+
     if (this.listener.pageScaleChange) {
       this.listener.pageScaleChange(payload)
     }
@@ -1594,6 +1644,39 @@ export class Draw {
   // setPageScale 等触发）才能恢复。executeUpdateOptions 不会自动调用，故在此暴露入口。
   public refreshPageSize(): void {
     this._updatePageSizes()
+  }
+
+  /**
+   * 需求19：清除所有临时批注样式（由 setControlContentByPlaceholder 追加的内容）。
+   * 被清除的元素恢复为文档默认色/背景/字体/字号，并移除 annotation 标记。
+   * 用于：下一次聚焦、下一次设置、打印前、获取值前。
+   */
+  public clearAnnotationStyles(): void {
+    const { defaultColor, defaultFont, defaultSize } = this.options
+    const walk = (list: IElement[]) => {
+      for (const el of list) {
+        if (el.trList) {
+          for (const tr of el.trList) {
+            for (const td of tr.tdList) {
+              walk(td.value ?? [])
+            }
+          }
+        }
+        if (el.annotation) {
+          el.annotation = undefined
+          el.color = defaultColor
+          // 背景色由 highlight 承载，恢复为空（透明）
+          el.highlight = ''
+          el.font = defaultFont
+          el.size = defaultSize
+        }
+        const controlValue = el.control?.value
+        if (controlValue && Array.isArray(controlValue)) {
+          walk(controlValue as IElement[])
+        }
+      }
+    }
+    walk(this.elementList)
   }
 
   public getOriginValue(
@@ -1720,7 +1803,9 @@ export class Draw {
     canvas.style.width = `${width}px`
     canvas.style.height = `${height}px`
     canvas.style.display = 'block'
-    canvas.style.backgroundColor = '#ffffff'
+    // canvas 元素的 CSS 背景跟随 options.background.color，
+    // 避免页面间隙/背景图未加载/打印背景禁用时露出硬编码的白色
+    canvas.style.backgroundColor = this.options.background.color
     // 混排横竖版时各页宽度可能不同，页 canvas 水平居中
     canvas.style.marginLeft = 'auto'
     canvas.style.marginRight = 'auto'
@@ -2010,33 +2095,123 @@ export class Draw {
           metrics.height = 0
           metrics.boundingBoxDescent = 0
         } else {
-          const elementWidth = element.width! * scale
-          const elementHeight = element.height! * scale
-          // 需求 5.3：图片左右内边距，布局预留 padL+padR，绘制时内缩
-          const padL = element.padding ? element.padding[3] * scale : 0
-          const padR = element.padding ? element.padding[1] * scale : 0
+          // 需求 5.3：图片四向内边距，布局预留 padL+padR（左右）/ padT+padB（上下），
+          // 绘制时内缩；上下内边距计入行高，避免与后续内容/分页重叠。
+          const {
+            padT: padTDoc,
+            padR: padRDoc,
+            padB: padBDoc,
+            padL: padLDoc
+          } = getImagePadding(element)
+          const padL = padLDoc * scale
+          const padR = padRDoc * scale
+          const padT = padTDoc * scale
+          const padB = padBDoc * scale
           const padLR = padL + padR
-          const slotWidth = elementWidth + padLR
-          // 图片超出尺寸后自适应（图片大小大于可用宽度时）
-          if (slotWidth > availableWidth) {
-            const availContent = Math.max(0, availableWidth - padLR)
-            const adaptiveHeight = (elementHeight * availContent) / elementWidth
-            element.width = availContent / scale
-            element.height = adaptiveHeight / scale
-            metrics.width = availContent + padLR
-            metrics.height = adaptiveHeight
-            metrics.boundingBoxDescent = adaptiveHeight
+          const padTB = padT + padB
+          let elementWidth: number
+          let elementHeight: number
+          if (element.isScaling && element.imgScaleRatio) {
+            // 需求 5.6：相对容器（单元格/页面）宽度实时计算，doc 单位、与
+            // scale 无关。写入独立临时字段 imgLiveWidth/Height，
+            // 不污染 element.width/height（后者被续页/表头/位置列表复用）。
+            const containerWidthDoc = availableWidth / scale
+            const padLRDoc = (padL + padR) / scale
+            // 需求 5.6：先按容器占比（imgScaleRatio=1/count）切分，再在每张图的份额内
+            // 扣除左右 padding 实现内缩。若先扣 padding 再乘占比，count>1 时每张图都会
+            // 把 padLR 计入自身份额并叠加，导致整体宽度溢出（缩放异常）。
+            const targetWdoc = Math.max(
+              0,
+              containerWidthDoc * element.imgScaleRatio - padLRDoc
+            )
+            // 以写入时的宽高比保持比例（多次计算后宽高比恒定）
+            const aspect =
+              element.width! > 0 ? element.height! / element.width! : 0
+            const targetHdoc = targetWdoc * aspect
+            element.imgLiveWidth = targetWdoc
+            element.imgLiveHeight = targetHdoc
+            elementWidth = targetWdoc * scale
+            elementHeight = targetHdoc * scale
+            metrics.width = elementWidth + padLR
+            // 上下内边距计入盒高，保证行高/分页预留完整高度
+            metrics.height = elementHeight + padTB
+            metrics.boundingBoxDescent = elementHeight + padTB
           } else {
-            metrics.width = slotWidth
-            metrics.height = elementHeight
-            metrics.boundingBoxDescent = elementHeight
+            elementWidth = element.width! * scale
+            elementHeight = element.height! * scale
+            const slotWidth = elementWidth + padLR
+            // 图片超出尺寸后自适应（图片大小大于可用宽度时）
+            if (slotWidth > availableWidth) {
+              const availContent = Math.max(0, availableWidth - padLR)
+              const adaptiveHeight =
+                (elementHeight * availContent) / elementWidth
+              // 写入临时字段，避免污染 element.width/height
+              //（后者被续页/表头/位置列表复用，污染会导致分页错乱）
+              element.imgLiveWidth = availContent / scale
+              element.imgLiveHeight = adaptiveHeight / scale
+              metrics.width = availContent + padLR
+              metrics.height = adaptiveHeight + padTB
+              metrics.boundingBoxDescent = adaptiveHeight + padTB
+            } else {
+              // 非自适应时清除可能残留的临时尺寸，回退到 element.width/height
+              element.imgLiveWidth = undefined
+              element.imgLiveHeight = undefined
+              metrics.width = slotWidth
+              metrics.height = elementHeight + padTB
+              metrics.boundingBoxDescent = elementHeight + padTB
+            }
           }
-          // 增加题注高度
+          // [调试-需求5.3/5.6] 图片布局尺寸诊断：对比单图宽度与行可用宽度，
+          // 定位 scale 变化导致“一行变 N 张”的根因（可用宽度/图片宽度是否 scale 相关）。
+          console.log(
+            '[img-debug] layout',
+            JSON.stringify({
+              scale,
+              rowIndex: rowList.length - 1,
+              elIndex: i,
+              elCount: elementList.length,
+              isFromTable: !!payload.isFromTable,
+              rowMaxWidth: Math.round(rowMaxWidth),
+              offsetX: Math.round(offsetX),
+              curRowWidth: Math.round(curRow.width),
+              availableWidth: Math.round(availableWidth),
+              isScaling: !!element.isScaling,
+              imgScaleRatio: element.imgScaleRatio ?? null,
+              elWidthDoc: element.width,
+              elHeightDoc: element.height,
+              imgLiveWidth: element.imgLiveWidth ?? null,
+              metricsWidth: Math.round(metrics.width),
+              metricsHeight: Math.round(metrics.height),
+              padL: Math.round(padL),
+              padR: Math.round(padR),
+              padT: Math.round(padT),
+              padB: Math.round(padB)
+            })
+          )
+          // 增加题注高度（支持多行换行）
           if (element.imgCaption?.value) {
             const fontSize = element.imgCaption.size || imgCaption.size
+            const fontFamily = element.imgCaption.font || imgCaption.font
             const captionTop = element.imgCaption.top ?? imgCaption.top
-            const captionHeight = (fontSize + captionTop) * scale
-            metrics.boundingBoxAscent += captionHeight
+            ctx.font = `${fontSize * scale}px ${fontFamily}`
+            let captionText = element.imgCaption.value
+            if (captionText.includes('{imageNo}')) {
+              const elementList = this.getOriginalMainElementList()
+              const imageNo =
+                Math.max(countImagesBeforeTarget(elementList, element), 0) + 1
+              captionText = substituteImageNo(captionText, imageNo)
+            }
+            const { padL: capPadL, padR: capPadR, padB: capPadB } =
+              getImagePadding(element)
+            const capWidth =
+              (element.imgLiveWidth ?? element.width!) * scale +
+              capPadL * scale +
+              capPadR * scale
+            const lines = wrapCaptionLines(ctx, captionText, capWidth)
+            const lineHeight = fontSize * scale * 1.4
+            const captionHeight = captionTop * scale + lines.length * lineHeight
+            // 预留下内边距 + 题注高度，避免与下一行/分页重叠
+            metrics.boundingBoxAscent += captionHeight + capPadB * scale
           }
         }
       } else if (element.type === ElementType.TABLE) {
@@ -2393,7 +2568,7 @@ export class Draw {
           element.type === ElementType.LATEX)
           ? metrics.height + rowMargin
           : metrics.boundingBoxAscent + rowMargin
-      const height =
+      let height =
         rowMargin +
         metrics.boundingBoxAscent +
         metrics.boundingBoxDescent +
@@ -2528,7 +2703,11 @@ export class Draw {
           element.value === ZERO &&
           !(element.area?.hide && !this.isAreaHideDisabled()))
       // 是否宽度不足导致换行
-      const isWidthNotEnough = curRowWidth > availableWidth
+      // 需求 5.6：浮点容差。图片槽宽×张数与容器宽在数学上精确相等
+      //（如单元格内 count=4：4×(157+20)×s === 708×s），但 IEEE754 累加在个别
+      // scale（如 0.8/1.6）下末位多出 ~1e-13，导致最后一张被误判换行（一行少一张）。
+      // 0.01px 容差仅吸收浮点噪声，不影响真实溢出判断（0.01px 视觉不可见）。
+      const isWidthNotEnough = curRowWidth > availableWidth + 0.01
       const isWrap = isForceBreak || isWidthNotEnough
       // 新行数据处理
       if (isWrap) {
@@ -2675,6 +2854,48 @@ export class Draw {
             curRow.height = 0
           }
         }
+        // 需求：整行内容仅由图片组成时，用图片高度直接作为行高、去除上下行距(rowMargin)，
+        // 避免图片上下出现多余空白。作用于「整行内容都是图片(无文本)且均不带题注」的场景
+        // （控件内图片默认 imgDisplay 为 undefined，按非内联分支计算，需区分处理）。
+        // 与分页无关：仅缩小该行高度，分页依据的同样是该 height 变量，逻辑不变。
+        {
+          const contentElements = curRow.elementList.filter(el => {
+            if (el.value === ZERO) return false
+            // 控件边界/前后缀/占位符等结构标记（非 VALUE）不计入内容
+            if (
+              el.controlComponent &&
+              el.controlComponent !== ControlComponent.VALUE
+            ) {
+              return false
+            }
+            return true
+          })
+          const allImage =
+            contentElements.length > 0 &&
+            contentElements.every(
+              el =>
+                el.type === ElementType.IMAGE &&
+                el.imgDisplay !== ImageDisplay.SURROUND &&
+                el.metrics.boundingBoxAscent === 0 &&
+                !el.hide &&
+                !this.traceParticle.isTraceHidden(el)
+            )
+          if (allImage) {
+            // 控件内图片默认 imgDisplay 为 undefined => 非内联(浮动)分支：
+            //   offsetY = curRow.ascent - metrics.height，需令 ascent = 图片高度使 offsetY=0；
+            // 内联图片：offsetY = curRow.ascent，令 ascent = 0 即可贴顶。
+            const isInline = contentElements.every(
+              el => el.imgDisplay === ImageDisplay.INLINE
+            )
+            const imgH = Math.max(
+              ...contentElements.map(el => el.metrics.height)
+            )
+            curRow.height = imgH
+            curRow.ascent = isInline ? 0 : imgH
+            curRow.isImageOnlyRow = true
+            height = imgH
+          }
+        }
         // 换行原因：宽度不足
         curRow.isWidthNotEnough = isWidthNotEnough && !isForceBreak
         // 两端对齐、分散对齐
@@ -2689,11 +2910,15 @@ export class Draw {
             curRow.elementList[0]?.value === ZERO
               ? curRow.elementList.slice(1)
               : curRow.elementList
-          const gap =
-            (availableWidth - curRow.width) / (rowElementList.length - 1)
-          for (let e = 0; e < rowElementList.length - 1; e++) {
-            const el = rowElementList[e]
-            el.metrics.width += gap
+          // 仅当存在 2 个及以上真实元素时才需要分配间距，
+          // 避免单元素行 (length - 1 === 0) 触发除零得到 NaN/Infinity
+          if (rowElementList.length > 1) {
+            const gap =
+              (availableWidth - curRow.width) / (rowElementList.length - 1)
+            for (let e = 0; e < rowElementList.length - 1; e++) {
+              const el = rowElementList[e]
+              el.metrics.width += gap
+            }
           }
           curRow.width = availableWidth
         }
@@ -2843,8 +3068,7 @@ export class Draw {
           row.columnIndex > 0 &&
           row.columnIndex !== prevColumnIndex
         if (columnChanged) {
-          pageHeight =
-            this.getMainOuterHeight(pageNo, direction) + rowAdvance
+          pageHeight = this.getMainOuterHeight(pageNo, direction) + rowAdvance
           pageRowList[pageNo].push(row)
         } else if (
           rowAdvance + pageHeight > pageLimit ||
@@ -2879,8 +3103,7 @@ export class Draw {
             pageLimit = this.getHeight(direction)
           }
           pageDirectionList[pageNo] = direction
-          pageHeight =
-            this.getMainOuterHeight(pageNo, direction) + rowAdvance
+          pageHeight = this.getMainOuterHeight(pageNo, direction) + rowAdvance
           pageRowList.push([row])
         } else {
           pageHeight += rowAdvance
@@ -3083,6 +3306,9 @@ export class Draw {
           element.rowFlex === RowFlex.JUSTIFY
         ) {
           // 如果是两端对齐，因canvas目前不支持letterSpacing需单独绘制文本
+          // 先刷出已缓冲内容（如零宽补偿字符 ZERO），再以自身坐标重绘，
+          // 避免共享 TextParticle 缓冲导致对齐元素绘制到错误坐标或丢失
+          this.textParticle.complete()
           this.textParticle.record(ctx, element, x, y + offsetY)
           this.textParticle.complete()
         } else if (element.type === ElementType.BLOCK) {
@@ -3128,12 +3354,22 @@ export class Draw {
           }
           // 当前元素位置信息记录
           const rowMargin = this.getElementRowMargin(element)
-          this.control.recordBorderInfo(
-            x,
-            y + rowMargin,
-            element.metrics.width,
-            curRow.height - 2 * rowMargin
-          )
+          if (curRow.isImageOnlyRow) {
+            // 纯图行：边框紧贴图片（去除上下行距内缩）
+            this.control.recordBorderInfo(
+              x,
+              y,
+              element.metrics.width,
+              curRow.height
+            )
+          } else {
+            this.control.recordBorderInfo(
+              x,
+              y + rowMargin,
+              element.metrics.width,
+              curRow.height - 2 * rowMargin
+            )
+          }
         } else if (preElement?.control?.border) {
           this.control.drawBorder(ctx)
         }
@@ -3589,6 +3825,14 @@ export class Draw {
 
   public render(payload?: IDrawOption) {
     this.renderCount++
+    // 同步已存在 canvas 元素的 CSS 背景色，使其在页面间隙/边缘处
+    // 与 options.background.color 保持一致（运行时切换 background 也生效）
+    const cssBgColor = this.options.background.color
+    for (const canvas of this.pageList) {
+      if (canvas.style.backgroundColor !== cssBgColor) {
+        canvas.style.backgroundColor = cssBgColor
+      }
+    }
     const { header, footer } = this.options
     const {
       isSubmitHistory = true,
@@ -3597,7 +3841,8 @@ export class Draw {
       isLazy = true,
       isInit = false,
       isSourceHistory = false,
-      isFirstRender = false
+      isFirstRender = false,
+      isFocus = true
     } = payload || {}
     let { curIndex } = payload || {}
     const innerWidth = this.getInnerWidth()
@@ -3719,7 +3964,7 @@ export class Draw {
     }
     // 光标重绘
     if (isSetCursor) {
-      curIndex = this.setCursor(curIndex)
+      curIndex = this.setCursor(curIndex, isFocus)
     } else if (this.range.getIsSelection()) {
       // 存在选区时仅定位避免事件无法捕获
       this.cursor.focus()
@@ -3779,7 +4024,7 @@ export class Draw {
     })
   }
 
-  public setCursor(curIndex: number | undefined) {
+  public setCursor(curIndex: number | undefined, isFocus = true) {
     const positionContext = this.position.getPositionContext()
     const positionList = this.position.getPositionList()
     if (positionContext.isTable) {
@@ -3821,7 +4066,8 @@ export class Draw {
       }
     }
     this.cursor.drawCursor({
-      isShow: isShowCursor
+      isShow: isShowCursor,
+      isFocus
     })
     return curIndex
   }
@@ -3840,6 +4086,18 @@ export class Draw {
     const pageNo = this.pageNo
     const oldPositionContext = deepClone(positionContext)
     const zone = this.zone.getZone()
+    // 需求：仅记录可编辑占位符的变化。
+    // 当 historyRecordEditableOnly 开启时，若本次内容与上一检查点的
+    // 「可编辑占位符签名」一致，则跳过入栈（不可编辑占位符改动不影响撤销/重做）。
+    // 空栈（首次基线）始终入栈，保证撤销不会越过初始状态。
+    let curSig: string | null = null
+    if (this.options.historyRecordEditableOnly) {
+      curSig = this.control.getEditableControlSignature()
+      const topSig = this.historyManager.getTopUndoSignature()
+      if (topSig !== null && topSig === curSig) {
+        return
+      }
+    }
     this.historyManager.execute(() => {
       this.zone.setZone(zone)
       this.setPageNo(pageNo)
@@ -3853,7 +4111,7 @@ export class Draw {
         isSubmitHistory: false,
         isSourceHistory: true
       })
-    })
+    }, curSig ?? undefined)
   }
 
   public destroy() {

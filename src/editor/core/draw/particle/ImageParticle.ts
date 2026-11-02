@@ -5,6 +5,11 @@ import { DeepRequired } from '../../../interface/Common'
 import { IEditorOption } from '../../../interface/Editor'
 import { IElement } from '../../../interface/Element'
 import { convertStringToBase64 } from '../../../utils'
+import {
+  getImagePadding,
+  substituteImageNo,
+  wrapCaptionLines
+} from '../../../utils/caption'
 import { Draw } from '../Draw'
 
 export class ImageParticle {
@@ -190,45 +195,42 @@ export class ImageParticle {
     width: number,
     height: number
   ) {
-    if (!element.imgCaption?.value) return
+    const caption = element.imgCaption
+    if (!caption?.value) return
     const { scale, imgCaption } = this.options
-    let captionText = element.imgCaption.value
+    const { padL, padR, padB } = getImagePadding(element)
+    const padLScale = padL * scale
+    const padRScale = padR * scale
+    const padBScale = padB * scale
+    // 题注相对（图像 + 左右 padding）整盒宽度居中
+    const boxWidth = width + padLScale + padRScale
+    const centerX = x - padLScale + boxWidth / 2
+    let captionText = caption.value
     // 替换特殊字符
     if (captionText.includes('{imageNo}')) {
       const elementList = this.draw.getOriginalMainElementList()
       const imageNo =
         Math.max(this._countImagesBeforeTarget(elementList, element), 0) + 1
-      captionText = captionText.replace(/\{imageNo\}/g, String(imageNo))
+      captionText = substituteImageNo(captionText, imageNo)
     }
-    const fontSize = (element.imgCaption.size || imgCaption.size) * scale
-    const fontFamily = element.imgCaption.font || imgCaption.font
-    const color = element.imgCaption.color || imgCaption.color
+    const fontSize = (caption.size || imgCaption.size) * scale
+    const fontFamily = caption.font || imgCaption.font
+    const color = caption.color || imgCaption.color
+    const captionTop = (caption.top ?? imgCaption.top) * scale
+    const lineHeight = fontSize * 1.4
     ctx.save()
     ctx.font = `${fontSize}px ${fontFamily}`
     ctx.fillStyle = color
     ctx.textAlign = 'center'
-    // 超出图片宽度后省略
-    let displayText = captionText
-    const textMetrics = ctx.measureText(captionText)
-    if (textMetrics.width > width) {
-      let left = 0
-      let right = captionText.length
-      while (left < right) {
-        const mid = Math.ceil((left + right) / 2)
-        const truncated = captionText.substring(0, mid)
-        if (ctx.measureText(truncated + '...').width <= width) {
-          left = mid
-        } else {
-          right = mid - 1
-        }
-      }
-      displayText = captionText.substring(0, left) + '...'
+    ctx.textBaseline = 'top'
+    // 超出（图像 + padding）宽度时换行展示
+    const lines = wrapCaptionLines(ctx, captionText, boxWidth)
+    // 题注位于图像底部 + 下内边距之下
+    let lineY = y + height + padBScale + captionTop
+    for (const line of lines) {
+      ctx.fillText(line, centerX, lineY)
+      lineY += lineHeight
     }
-    const captionTop = (element.imgCaption.top ?? imgCaption.top) * scale
-    const captionY =
-      y + height + captionTop + textMetrics.actualBoundingBoxAscent
-    const captionX = x + width / 2
-    ctx.fillText(displayText, captionX, captionY)
     ctx.restore()
   }
 
@@ -239,15 +241,19 @@ export class ImageParticle {
     y: number
   ) {
     const { scale } = this.options
-    // 需求 5.3：图片左右内边距，绘制时整体右移 padL，内容宽即 element.width
-    const padL = element.padding ? element.padding[3] * scale : 0
-    const drawX = x + padL
-    const width = element.width! * scale
-    const height = element.height! * scale
+    // 需求 5.3：图片四向内边距，绘制时整体内缩 padL/padT，内容宽即 element.width
+    const { padL, padT } = getImagePadding(element)
+    const drawX = x + padL * scale
+    const drawY = y + padT * scale
+    // 需求 5.6：isScaling 使用实时计算的临时尺寸，否则回退到 element.width/height
+    const liveW = element.imgLiveWidth ?? element.width!
+    const liveH = element.imgLiveHeight ?? element.height!
+    const width = liveW * scale
+    const height = liveH * scale
     if (this.imageCache.has(element.value)) {
       const img = this.imageCache.get(element.value)!
-      this._drawImageWithCrop(ctx, img, element, drawX, y, width, height)
-      this._renderCaption(ctx, element, drawX, y, width, height)
+      this._drawImageWithCrop(ctx, img, element, drawX, drawY, width, height)
+      this._renderCaption(ctx, element, drawX, drawY, width, height)
     } else {
       const cacheRenderCount = this.draw.getRenderCount()
       const imageLoadPromise = new Promise((resolve, reject) => {
@@ -258,7 +264,9 @@ export class ImageParticle {
           this.imageCache.set(element.value, img)
           resolve(element)
           // 因图片加载异步，图片加载后可能属于上一次渲染方法
-          if (cacheRenderCount !== this.draw.getRenderCount()) return
+          if (cacheRenderCount !== this.draw.getRenderCount()) {
+            return
+          }
           // 衬于文字下方图片需要重新首先绘制
           if (element.imgDisplay === ImageDisplay.FLOAT_BOTTOM) {
             this.draw.render({
@@ -267,11 +275,33 @@ export class ImageParticle {
               isSubmitHistory: false
             })
           } else {
-            this._drawImageWithCrop(ctx, img, element, drawX, y, width, height)
-            this._renderCaption(ctx, element, drawX, y, width, height)
+            this._drawImageWithCrop(ctx, img, element, drawX, drawY, width, height)
+            this._renderCaption(ctx, element, drawX, drawY, width, height)
           }
         }
         img.onerror = error => {
+          // 调试：实际图片解码失败（如 base64 损坏/被截断/超长导致解析失败），
+          // 将回退为灰色占位图。这里打印出错的 src 头部与异常，便于核对。
+          let errStr = ''
+          try {
+            errStr = JSON.stringify(error, (_k, val) =>
+              typeof val === 'string' && val.length > 200
+                ? val.slice(0, 200) + '…'
+                : val
+            )
+          } catch {
+            errStr = String(error)
+          }
+          console.warn(
+            '[logo][ImageParticle] 图片解码失败，已回退灰色占位图',
+            JSON.stringify({
+              srcHead: String(element.value).slice(0, 48),
+              srcLen: String(element.value).length,
+              width,
+              height,
+              error: errStr
+            })
+          )
           const fallbackImage = this.getFallbackImage(width, height)
           fallbackImage.onload = () => {
             this._drawImageWithCrop(
@@ -279,12 +309,12 @@ export class ImageParticle {
               fallbackImage,
               element,
               drawX,
-              y,
+              drawY,
               width,
               height
             )
             this.imageCache.set(element.value, fallbackImage)
-            this._renderCaption(ctx, element, drawX, y, width, height)
+            this._renderCaption(ctx, element, drawX, drawY, width, height)
           }
           reject(error)
         }

@@ -20,6 +20,8 @@ export interface IContextMenuContext {
   zone: EditorZone
   /** 需求 4.2/12：图片控件右键删除开关（控件级 imageCanDelete，由上下文注入） */
   imageCanDelete?: boolean
+  /** 需求 11：控件可编辑状态（控件级 editable，由上下文注入；false 禁用删除等） */
+  editable?: boolean
   trIndex: number | null
   tdIndex: number | null
   tableElement: IElement | null

@@ -33,6 +33,7 @@ import { ICursorOption } from '../interface/Cursor'
 import {
   IAnnotationStyle,
   IEditorOption,
+  IFocusPlaceholderOption,
   ILabOption,
   IModeRule
 } from '../interface/Editor'
@@ -68,7 +69,7 @@ import {
 } from '../dataset/enum/Editor'
 import { defaultBadgeOption } from '../dataset/constant/Badge'
 import { IBadgeOption } from '../interface/Badge'
-import { defaultModeRuleOption, defaultAnnotationOption } from '../dataset/constant/Editor'
+import { defaultModeRuleOption, defaultAnnotationOption, defaultFocusPlaceholderOption } from '../dataset/constant/Editor'
 import { IGraffitiOption } from '../interface/Graffiti'
 import { defaultGraffitiOption } from '../dataset/constant/Graffiti'
 import { IWhiteSpaceOption } from '../interface/WhiteSpace'
@@ -231,6 +232,10 @@ export function mergeOption(
     ...defaultAnnotationOption,
     ...options.annotation
   }
+  const focusPlaceholderOptions: Required<IFocusPlaceholderOption> = {
+    ...defaultFocusPlaceholderOption,
+    ...options.focusPlaceholder
+  }
 
   return {
     mode: EditorMode.EDIT,
@@ -269,6 +274,7 @@ export function mergeOption(
     paperDirection: PaperDirection.VERTICAL,
     inactiveAlpha: 0.6,
     historyMaxRecordCount: 100,
+    historyRecordEditableOnly: false,
     wordBreak: WordBreak.BREAK_WORD,
     printPixelRatio: 3,
     maskMargin: [0, 0, 0, 0],
@@ -277,6 +283,8 @@ export function mergeOption(
     shortcutDisableKeys: [],
     scrollContainerSelector: '',
     pageOuterSelectionDisable: false,
+    // 正文渲染缩放比例：百分比输入，实际记录比例值（缺省 1 = 100%）
+    bodyRenderScale: 1,
     ...options,
     lab: labOptions,
     table: tableOptions,
@@ -312,6 +320,7 @@ export function mergeOption(
     ruler: rulerOptions,
     hint: hintOptions,
     spellcheck: spellcheckOptions,
-    annotation: annotationOptions
+    annotation: annotationOptions,
+    focusPlaceholder: focusPlaceholderOptions
   }
 }

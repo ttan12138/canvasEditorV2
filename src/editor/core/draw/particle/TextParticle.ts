@@ -164,7 +164,8 @@ export class TextParticle {
   }
 
   private _render() {
-    if (!this.text || !~this.curX || !~this.curY) return
+    // 注意：坐标可能合法为 0，不能用 !~ 判断（~0 === -1 会被误判为未初始化）
+    if (!this.text || this.curX < 0 || this.curY < 0) return
     this.ctx.save()
     this.ctx.font = this.curStyle
     this.ctx.fillStyle = this.curColor || this.options.defaultColor

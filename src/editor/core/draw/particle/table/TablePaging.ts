@@ -26,6 +26,11 @@ export class TablePaging {
   // 仅将跨页表格的行记录拆分为按页片段（超高单元格按内容行行内拆分）
   public splitTableRowAcrossPages(rowList: IRow[]): IRow[] {
     const { scale } = this.options
+    // 整行取舍容差（文档单位，≈4px）：逐行 px 取整会让“本可放下的整行”累计高出
+    // 可用高度最多约数 px，此容差吸收该取整噪声，避免 0.x px 误差误判少放/多放一整行。
+    // 拆分与渲染共用同一容差（≈1px），保证拆分点对齐整行且与渲染窗口一致，
+    // 不被逐行 px 取整的亚 px 噪声误判少放一整行。
+    const TOL_DOC = 1 / scale
     // 分栏布局：行落位以（页码, 栏索引）槽位推进，与 _computePageList 规则一致
     const columnLayout = this.draw.getColumnLayout(this.options.paperDirection)
     const columnCount = columnLayout?.count || 1
@@ -119,10 +124,26 @@ export class TablePaging {
           }
         }
       }
-      // 行内拆分条件：行内各单元格均有内容
-      // （跨行合并单元格按窗口裁剪续排，不再限制切分位置）
-      const canSplitMidRow = (trIndex: number) =>
-        trList![trIndex].tdList.every(td => !!td.rowList?.length)
+      // 整页可用于表格内容的高度（与片段 availableTotal 同口径：curPageLimit 为缩放值，
+      // getMainOuterHeight 与 rowMarginHeight 亦按原逻辑参与扣减）
+      const pageContentHeight =
+        curPageLimit -
+        this.draw.getMainOuterHeight(0, curDirection) -
+        rowMarginHeight
+      // 行内拆分条件：
+      // 1) 仅当整行高度超过一整页可用高度（整页都放不下）时才允许行内拆分；
+      //    否则应整行移到下一页。避免「报告医师」这类单行短行被拆成续排片段：
+      //    续排段按整行内容绘制，绘制高度可能超过「行高 − 首页已消耗高度」的预留，
+      //    从而溢出并压到下一行（如「注」行）造成重叠。
+      // 2) 只要行内存在需要续排的单元格（含 rowList 且高度超整页）即可拆行，
+      //    不再要求同行每个 td 都有 rowList：短单元格（无 rowList）会因窗口求交
+      //    被完整绘制在每个片段中，无需参与行内拆分约束；原本的 every 判定会让
+      //    “含超高图片单元格 + 同行其它短单元格”的整行被误判为不可拆分而整表
+      //    透出，导致超高单元格内容被截断丢失。
+      const canSplitMidRow = (trIndex: number) => {
+        if (trList![trIndex].height! * scale <= pageContentHeight) return false
+        return getSplitRelevantTdList(trIndex).some(td => !!td.rowList?.length)
+      }
       // 拆分相关单元格：本行单元格 + 覆盖本行的跨行合并单元格
       const getSplitRelevantTdList = (trIndex: number) => {
         const tdList = [...trList![trIndex].tdList]
@@ -153,22 +174,36 @@ export class TablePaging {
           const tdWindowEnd = Math.min(td.height!, trY + windowHeight - td.y!)
           const tdWindowStart = Math.max(0, visibleTopFull - td.y!)
           if (tdWindowEnd <= tdWindowStart) continue
-          const [startLine, endLine] =
-            this.tableParticle.getTdLineRangeBySplitWindow(
-              td,
-              tdWindowStart,
-              tdWindowEnd
-            )
-          fit = Math.max(fit, endLine - startLine)
+          // 短单元格（无 rowList）按窗口求交被完整绘制在每个片段中，
+          // 不参与行内拆分约束，避免 td.rowList 为空导致越界/误判。
+          if (!td.rowList?.length) continue
+          // 文档单位整行判定（与渲染共用归一化前缀）：消除缩放浮点/逐行 px
+          // 取整误差，保证拆分点对齐整行且与渲染窗口完全一致，不随 scale 抖动。
+          const prefix = this.tableParticle.getTdRowDocPrefix(td)
+          // 与渲染共用同一整行取舍容差 TOL_DOC，保证拆分点对齐整行且与渲染窗口一致，
+          // 不被逐行 px 取整的 ~数 px 噪声误判少放一整行。
+          let startLine = 0
+          while (
+            startLine < prefix.length - 1 &&
+            prefix[startLine + 1] <= tdWindowStart + TOL_DOC
+          ) {
+            startLine++
+          }
+          let endLine = startLine
+          while (
+            endLine < prefix.length - 1 &&
+            prefix[endLine + 1] <= tdWindowEnd + TOL_DOC
+          ) {
+            endLine++
+          }
+          const fitLines = endLine - startLine
+          // 本窗口连一整行都放不下：不能在此拆分，交给上层整行下移/续排推进保障
+          if (fitLines <= 0) continue
+          fit = Math.max(fit, fitLines)
           if (endLine < td.rowList!.length) hasRemaining = true
-          // 内容底部（相对行顶）：决定拆分点所需的最小行高
-          // 内容行高为缩放单位，需还原为未缩放后再与行坐标运算；
-          // 续排窗口需计入窗口之前已消耗的内容行高，否则续页消耗高度被低估
-          const contentHeight = td
-            .rowList!.slice(0, endLine)
-            .reduce((pre, cur) => pre + cur.height, 0)
-          const contentBottom =
-            td.y! + tdPadding[0] + tdPadding[2] + contentHeight / scale - trY
+          // 拆分点（相对行顶）：本单元格顶 + 末包含整行底；对齐整行，不带入下内边距，
+          // 续排窗口起点恰为该行底，与下一片段窗口起始行衔接，无重叠无空隙。
+          const contentBottom = td.y! + prefix[endLine] - trY
           consumedHeight = Math.max(consumedHeight, contentBottom)
         }
         return { fit, hasRemaining, consumedHeight }
@@ -214,7 +249,8 @@ export class TablePaging {
         let endSplitHeight = -1
         if (fit >= 1) {
           if (hasRemaining) {
-            endSplitHeight = Math.min(consumedHeight, firstTrAvailable / scale)
+            // 容差内不截断到整行边界以下，否则渲染窗口按同行边界切片会与拆分点错位
+            endSplitHeight = Math.min(consumedHeight, firstTrAvailable / scale + TOL_DOC)
             if (trList![0].height! - endSplitHeight < minContinuationHeight) {
               endSplitHeight = trList![0].height! - minContinuationHeight
             }
@@ -222,7 +258,7 @@ export class TablePaging {
             trList![0].height! - firstTrAvailable / scale >=
             minContinuationHeight
           ) {
-            endSplitHeight = firstTrAvailable / scale
+            endSplitHeight = firstTrAvailable / scale + TOL_DOC
           }
         }
         if (endSplitHeight <= 0) {
@@ -367,8 +403,9 @@ export class TablePaging {
             let candidate = -1
             if (fit >= 1) {
               if (hasRemaining) {
-                // 续页还有内容：拆分点取实际消耗高度，并给续留行盒留足最小高度
-                candidate = Math.min(consumedHeight, available / scale)
+                // 续页还有内容：拆分点取实际消耗高度，并给续留行盒留足最小高度；
+                // 容差内不截断到整行边界以下，保证与渲染窗口切片行数一致
+                candidate = Math.min(consumedHeight, available / scale + TOL_DOC)
                 if (trList![end].height! - candidate < minContinuationHeight) {
                   candidate = trList![end].height! - minContinuationHeight
                 }
@@ -377,7 +414,7 @@ export class TablePaging {
                 minContinuationHeight
               ) {
                 // 内容全部放下且续留行盒非碎页：按可用高度拆分填满页面
-                candidate = available / scale
+                candidate = available / scale + TOL_DOC
               }
             }
             if (candidate > 0) {
@@ -580,7 +617,8 @@ export class TablePaging {
       Math.max(0, windowEnd)
     )
     // 裁剪后内容自然高度（内边距 + 内容行）不得超出行盒，
-    // 防止下次渲染按内容重新长高导致保留行再次被截断（截断震荡）
+    // 防止下次渲染按内容重新长高导致保留行再次被截断（截断震荡）。
+    // 与拆分/渲染共用归一化前缀与同一容差，避免逐行 px 取整在此处再次少裁/多裁一行。
     const rowList = td.rowList!
     const tdPaddingHeight = tdPadding[0] + tdPadding[2]
     let accHeight = 0

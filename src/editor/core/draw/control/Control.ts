@@ -263,6 +263,41 @@ export class Control {
     return false
   }
 
+  // 判断选区是否在同一控件内（忽略 POSTFIX 锚点）。
+  // 供字符格式命令在表单模式下放宽只读判定使用，不改变 getIsRangeWithinControl 语义。
+  public getIsRangeWithinControlIgnorePostfix(): boolean {
+    const { startIndex, endIndex } = this.getRange()
+    if (!~startIndex && !~endIndex) return false
+    const elementList = this.getElementList()
+    const startOuter = getOutermostOwner(elementList, startIndex)
+    const endOuter = getOutermostOwner(elementList, endIndex)
+    return !!(startOuter && startOuter === endOuter)
+  }
+
+  // 判断选区是否完整包含至少一个控件（同 controlId 的 PREFIX 与 POSTFIX 都在选区内）。
+  // 用于「全选 / 选区整体包裹某控件」场景：选区自身不跨控件边界，但包含控件首尾。
+  // 供字符格式命令在表单模式下放宽只读判定使用。
+  public isSelectionContainsFullControl(): boolean {
+    const { startIndex, endIndex } = this.getRange()
+    if (!~startIndex || !~endIndex || startIndex >= endIndex) return false
+    const elementList = this.getElementList()
+    const prefixIds = new Set<string>()
+    const postfixIds = new Set<string>()
+    for (let i = startIndex + 1; i <= endIndex; i++) {
+      const el = elementList[i]
+      if (!el?.controlId) continue
+      if (el.controlComponent === ControlComponent.PREFIX) {
+        prefixIds.add(el.controlId)
+      } else if (el.controlComponent === ControlComponent.POSTFIX) {
+        postfixIds.add(el.controlId)
+      }
+    }
+    for (const id of prefixIds) {
+      if (postfixIds.has(id)) return true
+    }
+    return false
+  }
+
   // 是否元素包含完整控件元素
   public getIsElementListContainFullControl(elementList: IElement[]): boolean {
     if (!elementList.some(element => element.controlId)) return false
@@ -1109,10 +1144,20 @@ export class Control {
     const control = startElement.control!
     if (!control.placeholder) return
     const placeholderMaxLength = this.options.placeholder.maxLength
-    const placeholderStrList =
-      placeholderMaxLength > 0
-        ? splitText(control.placeholder).slice(0, placeholderMaxLength)
-        : splitText(control.placeholder)
+    let placeholderStrList: string[]
+    let placeholderColor = this.controlOptions.placeholderColor
+    // 占位符显示长度上限：
+    //  -1/不设为不限制；正值为截断；
+    //  0 为「强制显示 1 个字符但用背景色渲染」——视觉隐藏，保留锚点，修复聚焦问题
+    if (placeholderMaxLength === 0) {
+      const firstPlaceholderChar = splitText(control.placeholder)[0]
+      placeholderStrList = [firstPlaceholderChar || ZERO]
+      placeholderColor = this.options.background.color
+    } else if (placeholderMaxLength && placeholderMaxLength > 0) {
+      placeholderStrList = splitText(control.placeholder).slice(0, placeholderMaxLength)
+    } else {
+      placeholderStrList = splitText(control.placeholder)
+    }
     // 优先使用默认控件样式
     const anchorElementStyleAttr = pickObject(startElement, CONTROL_STYLE_ATTR)
     for (let p = 0; p < placeholderStrList.length; p++) {
@@ -1124,7 +1169,7 @@ export class Control {
         type: ElementType.CONTROL,
         control: startElement.control,
         controlComponent: ControlComponent.PLACEHOLDER,
-        color: this.controlOptions.placeholderColor,
+        color: placeholderColor,
         size: this.options.placeholder.size,
         font: this.options.placeholder.font
       }
@@ -1317,6 +1362,94 @@ export class Control {
       getValue(elementList, zone)
     }
     return result
+  }
+
+  /**
+   * 需求：计算「可编辑占位符」的内容签名，用于历史记录过滤。
+   * 仅纳入 editable !== false 的控件（表单模式下 editable===false 视为不可编辑），
+   * 以 placeholder（缺省回落 controlId）为主键，聚合其文本内容 / 选择 code。
+   * 非可编辑占位符的变化不会改变该签名，因此不会被计入撤销/重做堆栈。
+   * 注意：按 placeholder 聚合可在程序化填充（可能重建并重排文档、重新生成 controlId）后保持稳定。
+   */
+  public getEditableControlSignature(): string {
+    const parts: string[] = []
+    const collect = (elementList: IElement[]) => {
+      let i = 0
+      while (i < elementList.length) {
+        const element = elementList[i]
+        // 表格下钻处理
+        if (element.type === ElementType.TABLE) {
+          for (const tr of element.trList ?? []) {
+            for (const td of tr.tdList) {
+              collect(td.value)
+            }
+          }
+          i++
+          continue
+        }
+        if (!element.control) {
+          i++
+          continue
+        }
+        // 仅统计可编辑控件；不可编辑占位符的变化不计入撤销
+        if (element.control.editable === false) {
+          i++
+          continue
+        }
+        const { type, code } = element.control
+        const key = element.control.placeholder || element.controlId || ''
+        if (
+          type === ControlType.TEXT ||
+          type === ControlType.DATE ||
+          type === ControlType.NUMBER
+        ) {
+          let j = i
+          let text = ''
+          while (j < elementList.length) {
+            const next = elementList[j]
+            if (next.controlId !== element.controlId) break
+            if (
+              next.controlComponent === ControlComponent.VALUE &&
+              !isElementTraceDeleted(next)
+            ) {
+              text += next.value
+            }
+            j++
+          }
+          parts.push(`${key}:${text}`)
+          i = j
+        } else if (
+          type === ControlType.SELECT ||
+          type === ControlType.CHECKBOX ||
+          type === ControlType.RADIO
+        ) {
+          parts.push(`${key}:${code ?? ''}`)
+          let j = i
+          while (
+            j < elementList.length &&
+            elementList[j].controlId === element.controlId
+          ) {
+            j++
+          }
+          i = j
+        } else {
+          // 其它控件类型：仅以占位符占位，不比较内容
+          let j = i
+          while (
+            j < elementList.length &&
+            elementList[j].controlId === element.controlId
+          ) {
+            j++
+          }
+          parts.push(`${key}:OTHER`)
+          i = j
+        }
+      }
+    }
+    collect(this.draw.getHeaderElementList())
+    collect(this.draw.getOriginalMainElementList())
+    collect(this.draw.getFooterElementList())
+    return parts.sort().join('|')
   }
 
   public setValueListById(payload: ISetControlValueOption[]) {
@@ -1595,6 +1728,59 @@ export class Control {
     return result
   }
 
+  // ============ 需求 21：按 placeholder 查找控件 id（用于滚动聚焦） ============
+  public getControlIdByPlaceholder(placeholder: string): string | null {
+    if (!placeholder) {
+      return null
+    }
+    let foundId: string | null = null
+    const collect = (elementList: IElement[]) => {
+      for (let i = 0; i < elementList.length; i++) {
+        const element = elementList[i]
+        if (element.type === ElementType.TABLE) {
+          for (const tr of element.trList!) {
+            for (const td of tr.tdList) collect(td.value)
+          }
+          continue
+        }
+        const control = element.control
+        if (!control?.placeholder) continue
+        if (control.placeholder === placeholder && !foundId) {
+          foundId = element.controlId!
+        }
+      }
+    }
+    collect(this.draw.getHeaderElementList())
+    if (foundId) return foundId
+    collect(this.draw.getOriginalMainElementList())
+    if (foundId) return foundId
+    collect(this.draw.getFooterElementList())
+    return foundId
+  }
+
+  // ============ 需求 21：收集文档内所有去重后的占位符（用于工具栏选择） ============
+  public getDistinctPlaceholders(): string[] {
+    const result: string[] = []
+    const collect = (elementList: IElement[]) => {
+      for (let i = 0; i < elementList.length; i++) {
+        const element = elementList[i]
+        if (element.type === ElementType.TABLE) {
+          for (const tr of element.trList!) {
+            for (const td of tr.tdList) collect(td.value)
+          }
+          continue
+        }
+        const placeholder = element.control?.placeholder
+        if (!placeholder) continue
+        if (!result.includes(placeholder)) result.push(placeholder)
+      }
+    }
+    collect(this.draw.getHeaderElementList())
+    collect(this.draw.getOriginalMainElementList())
+    collect(this.draw.getFooterElementList())
+    return result
+  }
+
   // ============ 需求 4/5：按 placeholder 查找并替换控件值 ============
   /** 解析图片原始宽高比，用于单元格内图片自适应 */
   private _loadImageSize(src: string): Promise<{ width: number; height: number }> {
@@ -1620,9 +1806,17 @@ export class Control {
           for (const tr of el.trList!) {
             for (const td of tr.tdList) {
               if (td.value === elementList) {
+                // 独占判定：单元格内只含这一个控件（按 controlId 去重），
+                // 而非“仅一个元素带 .control”（控件由 prefix/value/postfix
+                // 等多个组件组成，每个都带 .control，会让原判定恒为 false）。
+                const controlIds = new Set(
+                  td.value
+                    .filter(e => e.control && e.controlId)
+                    .map(e => e.controlId)
+                )
                 found = {
                   width: td.width ?? 0,
-                  alone: td.value.filter(e => e.control).length === 1
+                  alone: controlIds.size === 1
                 }
                 return
               }
@@ -1736,13 +1930,37 @@ export class Control {
               h = natH
             }
           }
+          // 需求 5.6：仅对“宽度由单元格派生（未显式指定宽）”的单元格图片开启
+          // isScaling，按容器实时重算、保持相对比例；显式固定宽高的图片保持
+          // isScaling=false，走 element.width*scale 的等比缩放，相对尺寸不变。
+          const widthAuto = isInCell && !setW
+          const scaleRatio = isInCell
+            ? count && count > 0
+              ? 1 / count
+              : 1
+            : 1
+          // [调试-需求5.6] 图片缩放占比诊断：确认 count/isInCell 与最终写入的
+          // isScaling、imgScaleRatio，定位 scale 变化导致每行张数变化的问题。
+          console.log(
+            '[img-debug] setScaleRatio',
+            JSON.stringify({
+              isInCell,
+              setW: setW ?? null,
+              count: count ?? null,
+              scaleRatio,
+              widthAuto,
+              outW: Math.round(w),
+              outH: Math.round(h)
+            })
+          )
           elements.push({
             type: ElementType.IMAGE,
             value: src,
             width: Math.max(1, Math.round(w)),
             height: Math.max(1, Math.round(h)),
             isWidthAuto: !setW,
-            isScaling: false
+            isScaling: widthAuto,
+            imgScaleRatio: widthAuto ? scaleRatio : undefined
           } as IElement)
         }
         valueElements = elements

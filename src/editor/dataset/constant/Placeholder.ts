@@ -6,5 +6,5 @@ export const defaultPlaceholderOption: Readonly<Required<IPlaceholder>> = {
   opacity: 1,
   size: 16,
   font: 'Microsoft YaHei',
-  maxLength: 0
+  maxLength: -1
 }

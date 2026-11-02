@@ -176,13 +176,13 @@ export class ContextMenu {
     const zone = this.draw.getZone().getZone()
     // 需求 4.2/12：将图片控件的删除开关注入上下文，供右键菜单 when 读取
     let imageCanDelete: boolean | undefined
+    // 需求 11：将控件可编辑状态注入上下文，供右键菜单 when 读取（不可编辑时禁用删除）
+    let editable: boolean | undefined
     if (startElement?.controlId) {
-      const controlValue = this.draw
-        .getControl()
-        .getValueById({ id: startElement.controlId })?.[0]
-      if (controlValue) {
-        imageCanDelete = controlValue.imageCanDelete
-      }
+      // 注意：getValueById 对图片控件不返回结果，须直接读元素上的 control 对象
+      const control = startElement.control
+      imageCanDelete = control?.imageCanDelete
+      editable = control?.editable
     }
     return {
       startElement,
@@ -200,6 +200,7 @@ export class ContextMenu {
       tdIndex: tdIndex ?? null,
       tableElement,
       imageCanDelete,
+      editable,
       options: this.options
     }
   }

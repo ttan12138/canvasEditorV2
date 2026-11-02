@@ -42,6 +42,8 @@ export interface IRow {
   fragmentPosition?: IElementPosition
   // 续页回显表头单元格的一次性位置列表（仅用于绘制，不参与命中）
   repeatTdPositionList?: { td: ITd; positionList: IElementPosition[] }[]
+  // 需求：整行内容仅由图片组成时置位，用于绘制阶段去除控件边框的上下行距内缩
+  isImageOnlyRow?: boolean
 }
 
 // 行计算跨行携带状态的快照：行起始时刻的完整状态，增量续算用它恢复

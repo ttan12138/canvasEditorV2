@@ -141,8 +141,7 @@ export function mousedown(evt: MouseEvent, host: CanvasEvent) {
     if (path && path.length) {
       const first = path[0]
       const el = draw.getOriginalElementList()[first.index as number]
-      targetTd =
-        el?.trList?.[first.trIndex]?.tdList?.[first.tdIndex] ?? null
+      targetTd = el?.trList?.[first.trIndex]?.tdList?.[first.tdIndex] ?? null
     } else {
       targetTd = draw.getTd()
     }
@@ -168,21 +167,83 @@ export function mousedown(evt: MouseEvent, host: CanvasEvent) {
     }
     return
   }
-  // 需求7.3：单元格仅含一个控件时，点击单元格空白聚焦该控件
-  if (isTable && curElement?.controlComponent !== ControlComponent.VALUE) {
+  // 需求7.3：表单模式下，点击单元格内控件区域时光标定位策略：
+  // - 直接命中内容文字（VALUE/PLACEHOLDER）：不劫持，光标停在点击处
+  //   （点击第一个字以前光标即在第一个字以前，点击中间即在中间）
+  // - 命中控件前缀（PREFIX/PRE_TEXT）：聚焦到该控件内容起始处
+  // - 其余空白/边界（前导空元素、POSTFIX、单元格留白等）：
+  //   · 空控件（无 VALUE，仅占位符）→ 聚焦内容起始处（光标显示在占位符开头）
+  //   · 有内容控件 → 点击位置在内容以前则聚焦内容起始，否则聚焦内容末尾
+  // 注意：不能定位到 POSTFIX——FORM 模式下光标落在 POSTFIX 时
+  // getIsRangeWithinControl 判定为「不在控件内」→ isReadonly()=true →
+  // initControl 拒绝激活控件，表现为点击空白不聚焦。光标停在内容元素上
+  // 保持「控件内」语义，空控件与有内容控件均适用。
+  if (
+    isTable &&
+    draw.getMode() === EditorMode.FORM &&
+    curElement?.controlComponent !== ControlComponent.VALUE &&
+    curElement?.controlComponent !== ControlComponent.PLACEHOLDER
+  ) {
     const td = draw.getTd()
     if (td) {
-      const controlIds = new Set<string>()
-      for (const e of td.value) {
-        if (e.controlId) controlIds.add(e.controlId)
+      // 是否命中控件前缀：此时聚焦到该控件内容起始处
+      const isHitPrefix =
+        curElement?.controlComponent === ControlComponent.PREFIX ||
+        curElement?.controlComponent === ControlComponent.PRE_TEXT
+      // 目标控件：命中前缀时为该控件，否则为单元格内最后一个控件
+      let cid: string | undefined
+      if (isHitPrefix) {
+        cid = curElement?.controlId
+      } else {
+        for (let k = td.value.length - 1; k >= 0; k--) {
+          if (td.value[k].controlId) {
+            cid = td.value[k].controlId
+            break
+          }
+        }
       }
-      if (controlIds.size === 1) {
-        let focusIdx = td.value.findIndex(
-          e => e.controlId && e.controlComponent === ControlComponent.VALUE
-        )
-        if (focusIdx < 0) focusIdx = td.value.findIndex(e => !!e.controlId)
-        if (focusIdx >= 0) {
-          curIndex = focusIdx
+      if (cid) {
+        // 收集该控件内容元素（VALUE/PLACEHOLDER）的首/末索引，并判断是否为空控件
+        let firstContentIdx = -1
+        let lastContentIdx = -1
+        let firstValueIdx = -1
+        for (let k = 0; k < td.value.length; k++) {
+          const e = td.value[k]
+          if (e.controlId !== cid) continue
+          if (
+            e.controlComponent === ControlComponent.VALUE &&
+            firstValueIdx < 0
+          ) {
+            firstValueIdx = k
+          }
+          if (
+            e.controlComponent === ControlComponent.VALUE ||
+            e.controlComponent === ControlComponent.PLACEHOLDER
+          ) {
+            if (firstContentIdx < 0) firstContentIdx = k
+            lastContentIdx = k
+          }
+        }
+        const isEmptyControl = firstValueIdx < 0
+        if (firstContentIdx >= 0) {
+          if (isHitPrefix || isEmptyControl || curIndex < firstContentIdx) {
+            // 前缀命中 / 空控件 / 点击位置在内容以前 → 聚焦内容起始处。
+            // 注意光标绘制在 curIndex 元素的右侧，故需定位到第一个内容
+            // 元素的前一个元素（PREFIX/PRE_TEXT，零宽），视觉上光标才
+            // 显示在第一个字以前
+            curIndex = Math.max(firstContentIdx - 1, 0)
+          } else {
+            curIndex = lastContentIdx
+          }
+          curElement = elementList[curIndex]
+        } else if (!isHitPrefix) {
+          // 兜底：控件无内容元素（仅 PREFIX/POSTFIX）时取最后一个任意元素
+          for (let k = td.value.length - 1; k >= 0; k--) {
+            if (td.value[k].controlId === cid) {
+              curIndex = k
+              break
+            }
+          }
           curElement = elementList[curIndex]
         }
       }
@@ -237,7 +298,13 @@ export function mousedown(evt: MouseEvent, host: CanvasEvent) {
     let anchorIndex = curIndex
     // 需求 11：表单模式下 editable === false 的控件不可聚焦（点击不进入光标/激活）
     const isControlDisabled =
-      draw.getMode() === EditorMode.FORM && curElement.control?.editable === false
+      draw.getMode() === EditorMode.FORM &&
+      curElement.control?.editable === false
+    // 需求19：点击聚焦到任意占位符（控件）时，清除所有临时批注样式，
+    // 将 setControlContentByPlaceholder 追加的临时高亮恢复为正常文本显示
+    if (!isControlDisabled && curElement?.controlId) {
+      draw.clearAnnotationStyles()
+    }
     // shift激活时进行选区处理
     if (evt.shiftKey) {
       const { startIndex: oldStartIndex, endIndex: oldEndIndex } =
@@ -330,11 +397,31 @@ export function mousedown(evt: MouseEvent, host: CanvasEvent) {
   const previewer = draw.getPreviewer()
   previewer.clearResizer()
   if (isDirectHitImage) {
+    // 注意：getValueById 对图片控件返回空，须直接读元素上的 control 对象
+    const ctrl = curElement.control
+    const isImageControlElement = !!(curElement.controlId && ctrl?.imageControl)
+    let resizeDisable = false
+    if (isImageControlElement) {
+      // 需求 4.3：imageResizable 缺省视为 true（显示缩放句柄），仅显式为 false 时隐藏
+      // 需求 11：控件不可编辑时禁用缩放句柄
+      resizeDisable = ctrl?.editable === false || ctrl?.imageResizable === false
+      console.log(
+        '[resizeGate] controlId=%s controlEditable=%s imageResizable=%s resizeDisable=%s',
+        curElement.controlId,
+        ctrl?.editable,
+        ctrl?.imageResizable,
+        resizeDisable
+      )
+    }
     const previewerDrawOption: IPreviewerDrawOption = {
-      // 只读或控件外表单模式禁用拖拽
-      dragDisable:
-        isReadonly ||
-        (!curElement.controlId && draw.getMode() === EditorMode.FORM)
+      // 控件图片：拖拽缩放仅受 control.editable / imageResizable 控制（与 resizeDisable
+      // 一致），不受只读模式限制；非控件图片维持原只读/控件外表单模式禁用拖拽
+      dragDisable: isImageControlElement
+        ? resizeDisable
+        : isReadonly ||
+          (!curElement.controlId && draw.getMode() === EditorMode.FORM),
+      // 控件内图片配置 imageResizable=false 时不显示 resize 句柄
+      resizeDisable
     }
     if (curElement.type === ElementType.LATEX) {
       previewerDrawOption.mime = 'svg'
@@ -352,12 +439,6 @@ export function mousedown(evt: MouseEvent, host: CanvasEvent) {
     // 点击图片允许拖拽调整位置
     // 需求 4.1：控件内图片（imageControl）禁止原生拖拽移动，
     // 避免把图片移出/移除控件导致控件值损坏、后续命中错位
-    const isImageControlElement = !!(
-      curElement.controlId &&
-      draw
-        .getControl()
-        .getValueById({ id: curElement.controlId })?.[0]?.imageControl
-    )
     if (!isImageControlElement) {
       setRangeCache(host)
     }

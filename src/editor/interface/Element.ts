@@ -36,6 +36,8 @@ export interface IElementStyle {
   bold?: boolean
   color?: string
   highlight?: string
+  /** 临时批注标记：由 setControlContentByPlaceholder 追加的内容，样式为临时态，会在聚焦/再次设置/打印/获取值前被清除 */
+  annotation?: boolean
   italic?: boolean
   underline?: boolean
   strikeout?: boolean
@@ -159,6 +161,8 @@ export interface IImageRule {
   canDelete?: boolean
   /** 需求 4.1/12：图片是否支持拖拽调整顺序（控件内图片，只读/表单模式） */
   draggable?: boolean
+  /** 需求 4.5：图片是否支持拖拽交换位置（控件内图片，只读/表单模式） */
+  swappable?: boolean
 }
 
 export interface IImageCrop {
@@ -196,8 +200,17 @@ export interface IImageBasic {
   }
   imgCrop?: IImageCrop
   imgCaption?: IImageCaption
-  // 需求 5.3：图片左右内边距 [上, 右, 下, 左]，仅左/右生效，绘制/布局时内缩
+  // 需求 5.3：图片四向内边距 [上, 右, 下, 左]（或二元组 [左, 右]），绘制/布局时四面内缩
   padding?: IPadding
+  /** 需求 5.6：图片宽度是否随容器（单元格/页面）实时自适应（保持相对比例，不写死、不撑布局） */
+  isScaling?: boolean
+  /** 需求 4/5：写入时是否为宽度自适应（未显式指定宽） */
+  isWidthAuto?: boolean
+  /** 需求 5.6：相对容器宽度的占比（如单元格内 count 张图则为 1/count），仅 isScaling 生效时使用 */
+  imgScaleRatio?: number
+  /** 需求 5.6：isScaling 实时计算出的 doc 单位尺寸（不污染 element.width/height，避免污染续页/表头复用） */
+  imgLiveWidth?: number
+  imgLiveHeight?: number
 }
 
 export type IImageElement = IImageBasic & IImageRule

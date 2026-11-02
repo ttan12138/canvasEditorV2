@@ -16,6 +16,8 @@ export function tab(evt: KeyboardEvent, host: CanvasEvent) {
   const control = draw.getControl()
   const activeControl = control.getActiveControl()
   if (activeControl && control.getIsRangeWithinControl()) {
+    // 需求19：Tab 聚焦到下一个占位符（控件）时，清除所有临时批注样式
+    draw.clearAnnotationStyles()
     control.initNextControl({
       direction: evt.shiftKey ? MoveDirection.UP : MoveDirection.DOWN
     })

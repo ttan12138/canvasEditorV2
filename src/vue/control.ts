@@ -1,8 +1,15 @@
 import type { Command, IElement } from '../editor'
 import type { IControl } from '../editor/interface/Control'
+import type { IAnnotationStyle } from '../editor/interface/Editor'
 import type { ITableCellInfo } from '../editor/interface/table/Td'
 import type { IPadding } from '../editor/interface/Common'
-import { ControlType, ElementType, VerticalAlign, TdBorder } from '../editor'
+import {
+  ControlType,
+  ElementType,
+  VerticalAlign,
+  TdBorder,
+  splitText
+} from '../editor'
 
 export type { ITableCellInfo }
 
@@ -29,8 +36,11 @@ export interface IReplaceValueDetail {
   width?: number
   /** 指定高度 */
   height?: number
-  /** 需求 5.3：图片左右内边距 [左, 右]，默认 [0,0]；在已算宽高基础上再内缩 */
-  padding?: [number, number]
+  /** 需求 5.3：图片内边距；二元组 [左, 右] 或四元组 [上, 右, 下, 左]，默认 [0,0]；
+   *  在已算宽高基础上再内缩，上下内边距计入行高 */
+  padding?: [number, number] | [number, number, number, number]
+  /** 图片描述文字（题注）：位于图像正下方，相对（图像+padding）宽度居中，超出换行 */
+  text?: string
   /** 是否可删除（控件级，预留） */
   canDelete?: boolean
   /** 是否可编辑（控件级，预留） */
@@ -54,14 +64,22 @@ export interface IReplaceControlPayload {
   draggable?: boolean
   /** 需求 4.2：整组图片是否支持右键删除（作为 values 各项 canDelete 的默认值） */
   canDelete?: boolean
+  /** 需求 4.3：控件内图片是否显示 resize 句柄用于调整尺寸（默认 true） */
+  resize?: boolean
+  /** 需求 4.5：控件内图片是否支持拖拽交换位置 */
+  swappable?: boolean
 }
 
 /** 需求 8.5：更新子表数据 */
 export interface ISetChildTablePayload {
   /** 子表单元格的 name（8.4.1.5） */
   name: string
-  /** 表数据；data.length = 表数据行数 */
-  data: unknown[][]
+  /**
+   * 表数据；两种形式二选一：
+   * - 二维数组：data[r][c] 按列顺序直接对应表头（data.length = 数据行数）；
+   * - 对象数组：每条对象 key 需与子表表头 key 匹配，按表头 key 顺序映射为行（缺失 key 取空值）。
+   */
+  data: unknown[][] | Record<string, unknown>[]
 }
 
 /** 需求 8.4：保存单元格联动/子表配置 */
@@ -122,11 +140,39 @@ export function getPlaceholderTextControls(
   return result
 }
 
+/**
+ * 需求3（补充）：以对象形式返回带 placeholder 的文本控件值
+ * 返回 { [占位符]: 内容 }；同名占位符多次出现时后者覆盖前者。
+ */
+export function getPlaceholderTextControlMap(
+  command: Command
+): Record<string, string> {
+  const list = command.getControlList()
+  const ids = Array.from(
+    new Set(list.map(e => e.controlId).filter((v): v is string => !!v))
+  )
+  const result: Record<string, string> = {}
+  for (const id of ids) {
+    const values = command.getControlValue({ id })
+    if (!values) continue
+    for (const item of values) {
+      if (item.type === ControlType.TEXT && item.placeholder) {
+        result[item.placeholder] = item.value ?? ''
+      }
+    }
+  }
+  return result
+}
+
 function loadImageSize(src: string): Promise<{ w: number; h: number }> {
   return new Promise(resolve => {
     const img = new Image()
-    img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight })
-    img.onerror = () => resolve({ w: 0, h: 0 })
+    img.onload = () => {
+      resolve({ w: img.naturalWidth, h: img.naturalHeight })
+    }
+    img.onerror = () => {
+      resolve({ w: 0, h: 0 })
+    }
     img.src = src
   })
 }
@@ -311,6 +357,24 @@ function computeImageSize(input: IImageSizeInput): {
     slotW = contentW
     slotH = autoHeight(contentW)
   }
+  // [调试-需求5.3] 图片尺寸计算诊断：确认 cellWidth/count 是否已含 scale，
+  // 以及 padding 扣减后输出是否仍为 doc 单位（避免布局再乘 scale 导致双重缩放）。
+  console.log(
+    '[img-debug] computeImageSize',
+    JSON.stringify({
+      inCell,
+      cellWidth: cellWidth ?? null,
+      count: count ?? null,
+      setW: setW ?? null,
+      setH: setH ?? null,
+      w0: w0 ?? null,
+      h0: h0 ?? null,
+      padLeft,
+      padRight,
+      outWidth: Math.round(slotW),
+      outHeight: Math.round(slotH)
+    })
+  )
   return { width: slotW, height: slotH }
 }
 
@@ -324,6 +388,7 @@ export async function setControlValueByPlaceholder(
   command: Command,
   payload: IReplaceControlPayload
 ): Promise<void> {
+  console.log('command', payload)
   // valueType 缺省视为 VALUE；isImage 仅作兼容别名
   const valueType: IReplaceValueType =
     payload.valueType ?? (payload.isImage ? 'IMAGE' : 'VALUE')
@@ -337,7 +402,8 @@ export async function setControlValueByPlaceholder(
     value: string
     width?: number
     height?: number
-    padding?: [number, number]
+    padding?: [number, number] | [number, number, number, number]
+    text?: string
     canDelete?: boolean
   }[] = []
   if (valueType === 'IMAGE') {
@@ -351,6 +417,7 @@ export async function setControlValueByPlaceholder(
         width: v.width,
         height: v.height,
         padding: v.padding,
+        text: v.text,
         // 需求 4.2：图片级删除配置；顶层 payload.canDelete 作为整组默认值
         canDelete: v.canDelete ?? payload.canDelete
       }))
@@ -385,24 +452,29 @@ export async function setControlValueByPlaceholder(
     }
   }
 
-  // 2. 根据 placeholder 查找控件 id
-  const list = command.getControlList()
-  const ids = Array.from(
-    new Set(list.map(e => e.controlId).filter((v): v is string => !!v))
-  )
-  const targetIds: string[] = []
-  for (const id of ids) {
-    const values = command.getControlValue({ id })
-    if (!values) continue
-    for (const item of values) {
-      if (item.placeholder && payload.name === item.placeholder) {
-        targetIds.push(id)
+  // 2. 根据 placeholder 查找控件 id（抽成函数，便于在 await 之后重新取最新 id）
+  const matchTargetIds = (): string[] => {
+    const list = command.getControlList()
+    const ids = Array.from(
+      new Set(list.map(e => e.controlId).filter((v): v is string => !!v))
+    )
+    const tIds: string[] = []
+    for (const id of ids) {
+      const values = command.getControlValue({ id })
+      if (!values) continue
+      for (const item of values) {
+        if (item.placeholder && payload.name === item.placeholder) {
+          tIds.push(id)
+        }
       }
     }
+    return tIds
   }
 
   // 3. 替换
   if (valueType !== 'IMAGE') {
+    // 文本分支无 await，直接取 id 即可
+    const targetIds = matchTargetIds()
     for (const id of targetIds) {
       command.executeSetControlValue({ id, value: textValue })
     }
@@ -411,10 +483,16 @@ export async function setControlValueByPlaceholder(
 
   const sizes = await Promise.all(
     imageItems.map(async item => {
-      if (item.width && item.height) return { w: item.width, h: item.height }
+      if (item.width && item.height) {
+        return { w: item.width, h: item.height }
+      }
       return loadImageSize(item.value)
     })
   )
+  // 关键修复：await 之后重新按 placeholder 取最新控件 id。
+  // 之前的控件赋值可能触发异步 render 重建元素列表并重分配 controlId，
+  // 若提前（await 前）固化 id，会导致此处 setId 在 setValueListById 中匹配不到。
+  const targetIds = matchTargetIds()
   // 单元格内容可用宽需扣除左右内边距（默认 tdPadding=[0,5,5,5]）
   const tdPadding = command.getOptions().table.tdPadding
   const tdPaddingWidth = tdPadding[1] + tdPadding[3]
@@ -436,7 +514,21 @@ export async function setControlValueByPlaceholder(
     const cellWidth = Math.max(0, rawCellWidth - tdPaddingWidth)
     const elements: IElement[] = imageItems.map((item, i) => {
       const size = sizes[i] ?? { w: 0, h: 0 }
-      const [padLeft = 0, padRight = 0] = item.padding ?? []
+      // 需求 5.3：padding 支持二元组 [left, right] 与四元组 [top, right, bottom, left]
+      const p = item.padding ?? []
+      let padLeft = 0
+      let padRight = 0
+      let padTop = 0
+      let padBottom = 0
+      if (p.length >= 4) {
+        padTop = p[0] ?? 0
+        padRight = p[1] ?? 0
+        padBottom = p[2] ?? 0
+        padLeft = p[3] ?? 0
+      } else {
+        padLeft = p[0] ?? 0
+        padRight = p[1] ?? 0
+      }
       const { width, height } = computeImageSize({
         w0: size.w,
         h0: size.h,
@@ -451,15 +543,64 @@ export async function setControlValueByPlaceholder(
       const el: IElement = { type: ElementType.IMAGE, value: item.value }
       if (width) el.width = Math.round(width)
       if (height) el.height = Math.round(height)
-      // 需求 5.3：在已算宽高之外再设置左右 padding（IPadding=[上,右,下,左]）
+      // 需求 5.3：写入完整 IPadding 四元组 [top, right, bottom, left]，
+      // 保留用户设置的上下内边距（不再硬性置 0）
       if (item.padding) {
-        el.padding = [0, padRight, 0, padLeft]
+        el.padding = [padTop, padRight, padBottom, padLeft]
       }
+      // 需求 5.6：单元格内“宽度自适应”（未显式指定宽）的图片开启 isScaling，
+      // 按容器实时重算宽度（imgScaleRatio=1/count）。这样 count 张图之和恒等于
+      // availableWidth，不受 getWidth 的 Math.floor 取整影响，避免不同 scale 下
+      // 每行张数漂移（如 scale=0.8 时第 4 张差 0.4px 塞不进，掉到 3 张）。
+      const widthAuto = inCell && !item.width
+      el.isScaling = widthAuto
+      el.imgScaleRatio = widthAuto
+        ? payload.count && payload.count > 0
+          ? 1 / payload.count
+          : 1
+        : undefined
       // 需求 4.2：图片级删除配置
       if (item.canDelete !== undefined) el.canDelete = item.canDelete
+      // 需求：图片描述文字（题注）——位于图像正下方、相对（图像+padding）宽度居中、超出换行
+      if (item.text) {
+        el.imgCaption = { value: item.text }
+      }
+      // [调试] 创建元素时打印写入的关键属性，确认 isScaling/imgScaleRatio 已写入
+      console.log(
+        '[img-debug] create-el',
+        JSON.stringify({
+          i,
+          inCell,
+          itemWidth: item.width ?? null,
+          widthAuto,
+          isScaling: el.isScaling ?? null,
+          imgScaleRatio: el.imgScaleRatio ?? null,
+          w: el.width ?? null,
+          h: el.height ?? null,
+          padding: el.padding ?? null
+        })
+      )
       return el
     })
     command.executeSetControlValue({ id, value: elements })
+    // [调试] 落库后读回控件值，验证 isScaling/imgScaleRatio/padding 是否被存储层保留
+    const backValue = command.getControlValue({ id })
+    const backElementList = backValue?.[0]?.elementList ?? []
+    const backImages = backElementList.filter(
+      e => e.type === ElementType.IMAGE
+    )
+    console.log(
+      '[img-debug] after-set',
+      JSON.stringify({
+        id,
+        elementsLen: elements.length,
+        backLen: backElementList.length,
+        backImages: backImages.length,
+        isScaling: backImages.map(e => !!e.isScaling),
+        ratio: backImages.map(e => e.imgScaleRatio ?? null),
+        padding: backImages.map(e => e.padding ?? null)
+      })
+    )
     // 需求 4/12：标记图片控件并写入拖拽配置（draggable 为控件级）
     command.executeSetControlProperties({
       id,
@@ -472,7 +613,17 @@ export async function setControlValueByPlaceholder(
         // formatElementList 的白名单剥离，控件级属性保存在 control 对象中可保留）
         ...(payload.canDelete === undefined
           ? {}
-          : { imageCanDelete: payload.canDelete })
+          : { imageCanDelete: payload.canDelete }),
+        // 需求 4.3/12：resize 写为控件级 imageResizable（默认 true，
+        // 控件内图片是否显示 resize 句柄，由 mousedown 读取此属性决定是否绘制）
+        ...(payload.resize === undefined
+          ? {}
+          : { imageResizable: payload.resize }),
+        // 需求 4.5：swappable 写为控件级 imageSwappable（图片级 swappable
+        // 会被 formatElementList 剥离，控件级属性保存在 control 对象中可保留）
+        ...(payload.swappable === undefined
+          ? {}
+          : { imageSwappable: payload.swappable })
       }
     })
   }
@@ -489,6 +640,137 @@ export async function setControlValuesByPlaceholder(
 ): Promise<void> {
   for (const payload of payloads) {
     await setControlValueByPlaceholder(command, payload)
+  }
+}
+
+/**
+ * 需求19（补充）：按 placeholder 清空控件值（文本控件置空，SELECT/CHECKBOX/RADIO/DATE/NUMBER 均清空其值）
+ * @returns 命中的控件数量
+ */
+export function clearControlValueByPlaceholder(
+  command: Command,
+  name: string
+): number {
+  const ids = findControlIdsByPlaceholder(command, name)
+  for (const id of ids) {
+    command.executeSetControlValue({ id, value: '' })
+  }
+  return ids.length
+}
+
+/**
+ * 需求19（补充）：按多个 placeholder 批量清空控件值
+ * @returns 命中的控件总数量
+ */
+export function clearControlValuesByPlaceholder(
+  command: Command,
+  names: string[]
+): number {
+  let total = 0
+  for (const name of names) {
+    total += clearControlValueByPlaceholder(command, name)
+  }
+  return total
+}
+
+/**
+ * 需求19：基于 placeholder 当前内容设置内容（带临时批注样式）
+ * - name：目标占位符（placeholder）
+ * - value：要设置/追加的文本值
+ * - mode：
+ *    0 = 直接替换当前已有内容；
+ *    1 = 基于已有内容的最后一部分追加（末尾追加）；
+ *    2 = 基于当前光标追加（若光标不在占位符/控件内则回退到 1）
+ * - options：设置内容的 color / backgroundColor(背景色) / font / size；缺省时回退到编辑器 annotation 选项，
+ *   再缺省回退到文档默认色与背景色（defaultColor / background.color）
+ * 设置内容被标记 annotation，其样式为临时态：下一次聚焦 / 下一次设置 / 打印前 / 获取值前会被清除。
+ */
+export interface ISetControlContentByPlaceholderPayload {
+  /**
+   * 单条设置：目标占位符（placeholder）；与 value 配对使用。
+   * 多占位符逐条设置时改用 items，name/value 可省略。
+   */
+  name?: string
+  /** 与 name 配对的文本值（单条） */
+  value?: string
+  /**
+   * 多占位符逐条设置：name 与 value 一一对应（每条各自的占位符与内容）。
+   * 提供 items 时优先于 name/value。
+   */
+  items?: { name: string; value: string }[]
+  /** 0=直接替换；1=末尾追加；2=光标处追加（光标不在占位符内时回退到 1） */
+  mode: 0 | 1 | 2
+  /** 设置内容样式；缺省回退到编辑器 annotation 选项，再缺省回退到文档默认色/背景 */
+  options?: IAnnotationStyle
+}
+
+export function setControlContentByPlaceholder(
+  command: Command,
+  payload: ISetControlContentByPlaceholderPayload
+): void {
+  const { mode, options } = payload
+  const editorOptions = command.getOptions()
+  const ann = editorOptions.annotation || {}
+  // 样式解析：调用参数 > 编辑器 annotation 选项 > 文档默认色/背景/字体/字号
+  const color = options?.color ?? ann.color ?? editorOptions.defaultColor
+  const backgroundColor =
+    options?.backgroundColor ??
+    ann.backgroundColor ??
+    editorOptions.background.color
+  const font = options?.font ?? ann.font ?? editorOptions.defaultFont
+  const size = options?.size ?? ann.size ?? editorOptions.defaultSize
+
+  // 下一次设置：先清除上一次批注样式
+  command.executeClearAnnotation?.()
+
+  // 组装逐条设置项：items 优先；否则使用单条 name/value（一一对应）
+  const pairs: { name: string; value: string }[] = []
+  if (payload.items?.length) {
+    pairs.push(...payload.items)
+  } else if (payload.name != null && payload.value != null) {
+    pairs.push({ name: payload.name, value: payload.value })
+  }
+  if (!pairs.length) return
+
+  const buildNew = (text: string): IElement[] =>
+    splitText(text).map(ch => ({
+      value: ch,
+      color,
+      // 文本背景色由 highlight 承载
+      highlight: backgroundColor,
+      font,
+      size,
+      annotation: true
+    }))
+
+  // 当前光标是否位于占位符/控件内（用于 mode=2 判断）
+  const isCursorInPlaceholder = !!command.getPositionContext().isControl
+
+  for (const { name: singleName, value: text } of pairs) {
+    const ids = findControlIdsByPlaceholder(command, singleName)
+    if (!ids.length) continue
+    for (const id of ids) {
+      if (mode === 2 && isCursorInPlaceholder) {
+        // 基于当前光标追加（光标位于占位符/控件内）
+        command.executeInsertElementList(buildNew(text), { isReplace: false })
+        continue
+      }
+      if (mode === 0) {
+        // 直接替换当前已有内容
+        command.executeSetControlValue({ id, value: buildNew(text) })
+        continue
+      }
+      // mode=1，或 mode=2 时光标不在占位符内（回退到 1）：基于已有内容末尾追加
+      const results = command.getControlValue({ id })
+      const currentText = results?.[0]?.value ?? results?.[0]?.innerText ?? ''
+      const existing: IElement[] = splitText(currentText).map(ch => ({
+        value: ch
+      }))
+      command.executeSetControlValue({
+        id,
+        value: [...existing, ...buildNew(text)]
+      })
+    }
   }
 }
 
@@ -538,17 +820,43 @@ function applyImageControlConfig(
   ids: string[],
   config: IImageControlConfig
 ): number {
-  const properties: Partial<IControl> = {}
-  if (config.canDelete !== undefined) {
-    properties.imageCanDelete = config.canDelete
+  // 需求 12：未显式指定的能力，回退到对应控件自身已配置的 imageXxx（即插入对话框
+  // 里设置的四个开关值）作为默认值；显式传入的 config 字段优先级最高。
+  const resolveOne = (
+    id: string
+  ): { id: string; properties: Partial<IControl> } | null => {
+    const existing = command.getControlValue({ id })?.[0]
+    const canDelete =
+      config.canDelete !== undefined
+        ? config.canDelete
+        : existing?.imageCanDelete
+    const draggable =
+      config.draggable !== undefined
+        ? config.draggable
+        : existing?.imageDraggable
+    const resize =
+      config.resize !== undefined ? config.resize : existing?.imageResizable
+    const swappable =
+      config.swappable !== undefined
+        ? config.swappable
+        : existing?.imageSwappable
+    const properties: Partial<IControl> = {}
+    if (canDelete !== undefined) properties.imageCanDelete = canDelete
+    if (draggable !== undefined) properties.imageDraggable = draggable
+    if (resize !== undefined) properties.imageResizable = resize
+    if (swappable !== undefined) properties.imageSwappable = swappable
+    if (!Object.keys(properties).length) return null
+    return { id, properties }
   }
-  if (config.draggable !== undefined) {
-    properties.imageDraggable = config.draggable
-  }
-  if (!Object.keys(properties).length) return 0
-  for (const id of ids) {
-    command.executeSetControlProperties({ id, properties })
-  }
+  const list = ids
+    .map(resolveOne)
+    .filter(
+      (v): v is { id: string; properties: Partial<IControl> } => v !== null
+    )
+  if (!list.length) return 0
+  // 批量一次性设置：executeSetControlProperties 会重建文档并重新生成 controlId，
+  // 逐个调用会导致后续 id 失效（多个图片控件时尤为明显）
+  command.executeSetControlPropertiesList(list)
   return ids.length
 }
 
@@ -563,19 +871,48 @@ export function setControlEditableByPlaceholder(
   editable: boolean
 ): number {
   const names = Array.isArray(name) ? name : [name]
-  const ids = names.flatMap(n => findControlIdsByPlaceholder(command, n))
-  for (const id of ids) {
-    command.executeSetControlProperties({ id, properties: { editable } })
-  }
-  return ids.length
+  // 直接遍历文档按占位符设置 editable，不依赖 controlId（模板加载初期尚未分配）。
+  return command.setControlsEditableByPlaceholders(names, editable)
 }
 
-/** 需求 12：图片控件删除/拖拽能力配置 */
+/**
+ * 需求 11（补充）：表单模式下设置【全部】占位符控件可编辑/不可编辑
+ * @returns 命中的控件数量
+ */
+export function setAllControlEditable(
+  command: Command,
+  editable: boolean
+): number {
+  // 直接遍历文档内（含表格单元格）所有控件对象设置 editable，
+  // 不依赖 controlId——模板加载初期 controlId 尚未分配时 getControlList 会返回空，
+  // 但渲染展开后会复用同一个 control 对象引用，因此此处写入的 editable 会生效。
+  return command.setAllControlsEditable(editable)
+}
+
+/**
+ * 需求 11（补充）：表单模式下按【多个】占位符设置控件可编辑/不可编辑
+ * @param names 占位符名称数组（并集）
+ * @returns 命中的控件数量
+ */
+export function setControlsEditableByPlaceholders(
+  command: Command,
+  names: string[],
+  editable: boolean
+): number {
+  // 直接遍历文档按占位符集合设置 editable，不依赖 controlId（模板加载初期尚未分配）。
+  return command.setControlsEditableByPlaceholders(names, editable)
+}
+
+/** 需求 12：图片控件删除/拖拽/缩放能力配置 */
 export interface IImageControlConfig {
   /** 是否支持右键删除控件内图片 */
   canDelete?: boolean
   /** 是否支持拖拽调整图片顺序 */
   draggable?: boolean
+  /** 需求 4.3/12：是否显示控件内图片的 resize 句柄用于调整尺寸（默认 true） */
+  resize?: boolean
+  /** 需求 4.5：是否支持拖拽交换图片位置 */
+  swappable?: boolean
 }
 
 /**

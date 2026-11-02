@@ -594,17 +594,29 @@ export function formatElementList(
         }
       } else if (placeholder) {
         // placeholder
+        const placeholderBgColor = editorOptions.background.color
+        const placeholderMaxLength = editorOptions.placeholder.maxLength
+        let placeholderStrList: string[]
+        let placeholderColor = editorOptions.control.placeholderColor
+        // 占位符显示长度上限：
+        //  -1/不设为不限制；正值为截断；
+        //  0 为「强制显示 1 个字符但用背景色渲染」——视觉隐藏，同时保留可聚焦/定位锚点，
+        //    修复 maxLength=0 时无字符导致的聚焦问题
+        if (placeholderMaxLength === 0) {
+          const firstPlaceholderChar = splitText(placeholder)[0]
+          placeholderStrList = [firstPlaceholderChar || ZERO]
+          placeholderColor = placeholderBgColor
+        } else if (placeholderMaxLength && placeholderMaxLength > 0) {
+          placeholderStrList = splitText(placeholder).slice(0, placeholderMaxLength)
+        } else {
+          placeholderStrList = splitText(placeholder)
+        }
         const thePlaceholderArgs: Omit<IElement, 'value'> = {
           ...controlDefaultStyle,
-          color: editorOptions.control.placeholderColor,
+          color: placeholderColor,
           size: editorOptions.placeholder.size,
           font: editorOptions.placeholder.font
         }
-        const placeholderMaxLength = editorOptions.placeholder.maxLength
-        const placeholderStrList =
-          placeholderMaxLength > 0
-            ? splitText(placeholder).slice(0, placeholderMaxLength)
-            : splitText(placeholder)
         for (let p = 0; p < placeholderStrList.length; p++) {
           const value = placeholderStrList[p]
           elementList.splice(i, 0, {
@@ -1224,6 +1236,7 @@ export function formatElementContext(
 interface IPlaceholderRefreshOptions {
   placeholder: { size?: number; font?: string; maxLength?: number }
   control: { placeholderColor?: string }
+  background: { color: string }
 }
 
 export function refreshPlaceholderElements(
@@ -1257,14 +1270,24 @@ export function refreshPlaceholderElements(
       }
       const control = el.control
       const charList = splitText(control.placeholder || '')
-      const displayChars =
-        maxLength && maxLength > 0 ? charList.slice(0, maxLength) : charList
+      // 占位符显示长度上限：
+      //  -1/不设为不限制；正值为截断；
+      //  0 为「强制显示 1 个字符但用背景色渲染」——视觉隐藏，保留锚点，修复聚焦问题
+      let displayChars = charList
+      let renderColor = placeholderColor
+      if (maxLength === 0) {
+        const firstChar = charList[0]
+        displayChars = firstChar ? [firstChar] : [ZERO]
+        renderColor = editorOptions.background.color
+      } else if (maxLength && maxLength > 0) {
+        displayChars = charList.slice(0, maxLength)
+      }
       const newRun: IElement[] = displayChars.map(ch => ({
         ...el,
         value: ch === '\n' ? ZERO : ch,
         size,
         font,
-        color: placeholderColor,
+        color: renderColor,
         controlComponent: ControlComponent.PLACEHOLDER,
         controlId: el.controlId,
         control

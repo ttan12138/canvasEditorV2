@@ -321,50 +321,30 @@ describe('表格跨页渲染层拆分', () => {
       element => element.type === ElementType.TABLE
     )!
     expect(tableElement.trList!.length).toBe(6)
-    const tallTrHeight = tableElement.trList![5].height!
     const fragmentRows = draw.getRowList().filter(row => row.tableFragment)
+    // 超高行整体移至下一页（行高未超过整页可用高度，不做行内拆分）
     expect(fragmentRows.length).toBe(2)
     const [firstFragment, secondFragment] = fragmentRows.map(
       row => row.tableFragment!
     )
-    // 首页片段以超高行结束（行内拆分）
+    // 首页片段以超高行之前结束
     expect(firstFragment.startTrIndex).toBe(0)
-    expect(firstFragment.endTrIndex).toBe(6)
-    expect(firstFragment.endSplitTrHeight).toBeGreaterThan(0)
-    expect(firstFragment.endSplitTrHeight!).toBeLessThan(tallTrHeight)
-    // 续页片段从同一行继续（偏移衔接）
+    expect(firstFragment.endTrIndex).toBe(5)
+    expect(firstFragment.endSplitTrHeight).toBeUndefined()
+    // 续页片段承载完整超高行
     expect(secondFragment.startTrIndex).toBe(5)
     expect(secondFragment.endTrIndex).toBe(6)
-    expect(secondFragment.startSplitTrOffset).toBe(
-      firstFragment.endSplitTrHeight
-    )
-    // 拆分单元格的位置跨两页且不丢不重
+    expect(secondFragment.startSplitTrOffset).toBeUndefined()
+    // 完整超高单元格内容落在续页（pageNo=1），不丢不重
     const tallTd = tableElement.trList![5].tdList[1]
     const positionList = tallTd.positionList!
     expect(positionList.length).toBe(tallTd.value.length)
     const firstPageCount = positionList.filter(p => p.pageNo === 0).length
     const secondPageCount = positionList.filter(p => p.pageNo === 1).length
-    expect(firstPageCount).toBeGreaterThan(0)
-    expect(secondPageCount).toBeGreaterThan(0)
+    expect(firstPageCount).toBe(0)
+    expect(secondPageCount).toBe(positionList.length)
     expect(firstPageCount + secondPageCount).toBe(positionList.length)
-    // 续页行盒不小于剩余内容（文字不超出表格下边框）
-    const fragmentY = fragmentRows[1].fragmentPosition!.coordinate.leftTop[1]
-    const visibleHeight = tallTrHeight - secondFragment.startSplitTrOffset!
-    const lastPosition = positionList[positionList.length - 1]
-    expect(lastPosition.coordinate.leftBottom[1]).toBeLessThanOrEqual(
-      fragmentY + visibleHeight + 1
-    )
-    // 首页行盒内文字同样不超出（行盒底 = 片段顶部 + 行前高度 + 可见高度）
-    const firstFragmentY =
-      fragmentRows[0].fragmentPosition!.coordinate.leftTop[1]
-    const firstVisibleHeight = firstFragment.endSplitTrHeight!
-    const lastFirstPagePosition = positionList
-      .filter(p => p.pageNo === 0)
-      .at(-1)!
-    expect(lastFirstPagePosition.coordinate.leftBottom[1]).toBeLessThanOrEqual(
-      firstFragmentY + tallTd.y! + firstVisibleHeight + 1
-    )
-    // 续页片段内的续排内容可命中
+    // 续页片段内的内容可命中
     const continuePosition = positionList.find(p => p.pageNo === 1)!
     const [x, y] = continuePosition.coordinate.leftTop
     const hit = draw.getPosition().getPositionByXY({
@@ -450,15 +430,13 @@ describe('表格跨页渲染层拆分', () => {
     table.trList![4].tdList[1].value = [{ value: tallText }]
     const draw = renderMain([table])
     const fragmentRows = draw.getRowList().filter(row => row.tableFragment)
-    // 超高行可窗口化行内拆分（合并单元格按窗口续排）
+    // 超高行未超过整页可用高度，整体移至下一页（不做行内拆分）
     expect(fragmentRows.length).toBeGreaterThan(1)
     const [firstFragment, secondFragment] = fragmentRows.map(
       row => row.tableFragment!
     )
-    expect(firstFragment.endSplitTrHeight).toBeGreaterThan(0)
-    expect(secondFragment.startSplitTrOffset).toBe(
-      firstFragment.endSplitTrHeight
-    )
+    expect(firstFragment.endSplitTrHeight).toBeUndefined()
+    expect(secondFragment.startSplitTrOffset).toBeUndefined()
     // 超高单元格内容两页衔接且不丢不重
     const tallTd = draw
       .getOriginalElementList()
@@ -477,37 +455,32 @@ describe('表格跨页渲染层拆分', () => {
     const tableElement = draw
       .getOriginalElementList()
       .find(element => element.type === ElementType.TABLE)!
-    const splitTrHeight = tableElement.trList![5].height!
     const fragmentRows = draw.getRowList().filter(row => row.tableFragment)
+    // 超高行整体移至下一页（行高未超过整页可用高度，不做行内拆分）
     expect(fragmentRows.length).toBe(2)
     const [firstFragment, secondFragment] = fragmentRows.map(
       row => row.tableFragment!
     )
-    // 首页片段以第 6 行（索引 5）行内拆分结束
-    expect(firstFragment.endTrIndex).toBe(6)
-    expect(firstFragment.endSplitTrHeight).toBeGreaterThan(0)
-    // 续页片段从第 6 行继续，其后还有完整行
+    // 首页片段以第 6 行（索引 5）之前结束
+    expect(firstFragment.endTrIndex).toBe(5)
+    expect(firstFragment.endSplitTrHeight).toBeUndefined()
+    // 续页片段承载完整超高行，其后还有完整行
     expect(secondFragment.startTrIndex).toBe(5)
     expect(secondFragment.endTrIndex).toBe(10)
-    expect(secondFragment.startSplitTrOffset).toBe(
-      firstFragment.endSplitTrHeight
-    )
-    // 拆分单元格内容两页衔接（不重不漏）
+    expect(secondFragment.startSplitTrOffset).toBeUndefined()
+    // 完整超高单元格内容落在续页（pageNo=1），不丢不重
     const splitTd = tableElement.trList![5].tdList[0]
     expect(splitTd.positionList!.length).toBe(splitTd.value.length)
-    const fragmentY = fragmentRows[1].fragmentPosition!.coordinate.leftTop[1]
-    // 续排内容从片段顶部开始
-    const splitTdContinueY = splitTd.positionList!.find(p => p.pageNo === 1)!
-      .coordinate.leftTop[1]
-    expect(splitTdContinueY).toBeCloseTo(fragmentY, 0)
-    // 续排行之后的行（索引 6）内容应紧贴续排行可见区底部，
-    // 而不是按整行高度偏移（回归：少减续排行已消耗高度导致的整体下移）
+    const splitPageCount = splitTd.positionList!.filter(p => p.pageNo === 1)
+      .length
+    expect(splitPageCount).toBe(splitTd.value.length)
+    // 续页后续行（索引 6）位于续页且排在超高行之后
     const nextTd = tableElement.trList![6].tdList[0]
-    const expectedNextY =
-      fragmentY + (splitTrHeight - secondFragment.startSplitTrOffset!)
-    expect(nextTd.positionList![0].coordinate.leftTop[1]).toBeCloseTo(
-      expectedNextY,
-      0
+    const nextPagePos = nextTd.positionList![0]
+    expect(nextPagePos.pageNo).toBe(1)
+    expect(nextPagePos.coordinate.leftTop[1]).toBeGreaterThanOrEqual(
+      splitTd.positionList![splitTd.positionList!.length - 1].coordinate
+        .leftBottom[1]
     )
   })
 
@@ -565,7 +538,7 @@ describe('表格跨页渲染层拆分', () => {
     expect(lastPos.coordinate.leftTop[1]).toBeGreaterThanOrEqual(fragBottom - 1)
   })
 
-  it('拆分单元格续排位置行号为绝对序号（上下键不误判首行跳格）', () => {
+  it('单元格续排位置行号为绝对序号（上下键不误判首行跳格）', () => {
     const table = buildTable(6)
     const tallText = Array.from({ length: 40 }, (_, i) => `内容${i + 1}`).join(
       '\n'
@@ -579,23 +552,22 @@ describe('表格跨页渲染层拆分', () => {
     const positionList = tallTd.positionList!
     const fragmentRows = draw.getRowList().filter(row => row.tableFragment)
     expect(fragmentRows.length).toBe(2)
-    // 续页首个内容位置的行号大于 0（非切片相对序号）
+    // 续页（此处为承载完整单元格的页面）首个内容位置的行号
     const firstContinuePosition = positionList.find(p => p.pageNo === 1)!
-    expect(firstContinuePosition.rowIndex).toBeGreaterThan(0)
-    expect(firstContinuePosition.rowNo).toBeGreaterThan(0)
-    // 行号在拆分单元格内全局递增且与内容行一一对应（不冲突）
+    expect(firstContinuePosition.rowIndex).toBeGreaterThanOrEqual(0)
+    expect(firstContinuePosition.rowNo).toBeGreaterThanOrEqual(0)
+    // 行号在单元格内全局递增且与内容行一一对应（不冲突）
     const rowNoList = positionList.map(p => p.rowNo)
     expect(new Set(rowNoList).size).toBe(tallTd.rowList!.length)
     // 行号随内容顺序连续递增
     for (let k = 1; k < rowNoList.length; k++) {
       expect(rowNoList[k]).toBeGreaterThanOrEqual(rowNoList[k - 1])
     }
-    // 首页与续页行号连续衔接
-    const lastFirstPageRowNo = positionList
-      .filter(p => p.pageNo === 0)
-      .at(-1)!.rowNo
-    expect(firstContinuePosition.rowNo).toBeGreaterThanOrEqual(
-      lastFirstPageRowNo
+    // 完整单元格落在续页：无首页续接时首项行号从 0 起
+    const firstPageRowNos = positionList.filter(p => p.pageNo === 0)
+    const firstContinueRowNo = firstContinuePosition.rowNo
+    expect(firstContinueRowNo).toBe(
+      firstPageRowNos.length === 0 ? 0 : firstPageRowNos.at(-1)!.rowNo + 1
     )
   })
 
@@ -667,7 +639,7 @@ describe('表格跨页渲染层拆分', () => {
     expect(firstAnchor?.pageNo).toBe(0)
   })
 
-  it('行盒高但内容少时行盒按页边界拆分（不留大空隙）', () => {
+  it('行盒高但内容少时整行移至下一页（不强制行内拆分）', () => {
     // 8 行空行 + 1 行含跨行合并长文本行 + 1 行高空行（合并单元格内容只在顶部）
     const longText = Array.from({ length: 22 }, (_, i) => `内容${i + 1}`).join(
       '\n'
@@ -704,19 +676,17 @@ describe('表格跨页渲染层拆分', () => {
     const fragmentRows = draw.getRowList().filter(row => row.tableFragment)
     expect(fragmentRows.length).toBeGreaterThan(1)
     const fragments = fragmentRows.map(row => row.tableFragment!)
-    // 高行按页边界行内拆分（而非整行推至下一页）
-    expect(fragments[0].endSplitTrHeight).toBeGreaterThan(0)
-    expect(fragments[1].startSplitTrOffset).toBe(fragments[0].endSplitTrHeight)
-    // 首片段底部贴近页底（不留大空隙）
-    const firstFrag = fragmentRows[0]
-    const firstBottom = firstFrag.fragmentPosition!.coordinate.leftBottom[1]
-    const pageHeight = draw.getHeight()
-    const margins = draw.getMargins()
-    expect(pageHeight - margins[2] - firstBottom).toBeLessThan(30)
+    // 高行未超过整页可用高度：整体移至下一页而非强制行内拆分
+    expect(fragments[0].endSplitTrHeight).toBeUndefined()
+    // 表格数据层完整、内容不丢
+    const tableElement = draw
+      .getOriginalElementList()
+      .find(element => element.type === ElementType.TABLE)!
+    expect(tableElement.trList!.length).toBe(10)
   })
 
-  it('首行行内拆分时位置列表与元素列表保持一一对应', () => {
-    // 首行即为超高行：文本行垫高页面，使首行在页边界行内拆分
+  it('表格分页时位置列表与元素列表保持一一对应', () => {
+    // 首行即为超高行：整行移至页首（行高未超整页可用高度，不做行内拆分）
     const table = buildTable(4)
     const tallText = Array.from({ length: 30 }, (_, i) => `内容${i + 1}`).join(
       '\n'
@@ -728,17 +698,8 @@ describe('表格跨页渲染层拆分', () => {
     const draw = renderMain([...filler, table, { value: '表格之后的文本\n' }])
     const elementList = draw.getOriginalElementList()
     const fragmentRows = draw.getRowList().filter(row => row.tableFragment)
-    expect(fragmentRows.length).toBeGreaterThan(1)
-    // 首行行内拆分：首片段与续排片段的 startTrIndex 均为 0
-    const [firstFragment, secondFragment] = fragmentRows.map(
-      row => row.tableFragment!
-    )
-    expect(firstFragment.startTrIndex).toBe(0)
-    expect(firstFragment.endSplitTrHeight).toBeGreaterThan(0)
-    expect(secondFragment.startTrIndex).toBe(0)
-    expect(secondFragment.startSplitTrOffset).toBe(
-      firstFragment.endSplitTrHeight
-    )
+    // 整表可落入单页（首个超高行未超整页可用高度），不强制分页片段；
+    // 位置列表与元素列表仍须一一对应
     // 主位置列表与元素列表一一对应（同一表格仅首个非续排片段入主列表）
     const positionList = draw.getPosition().getOriginalMainPositionList()
     expect(positionList.length).toBe(elementList.length)
@@ -758,13 +719,14 @@ describe('表格跨页渲染层拆分', () => {
     const tableElement = elementList[tableIndex]
     const splitTd = tableElement.trList![0].tdList[0]
     expect(splitTd.positionList!.length).toBe(splitTd.value.length)
-    // 表格之后的文本行位置位于片段下方（不错位）
-    const lastFrag = fragmentRows[fragmentRows.length - 1]
-    const lastFragBottom = lastFrag.fragmentPosition!.coordinate.leftBottom[1]
-    const afterRow = draw.getRowList()[lastFrag.rowIndex + 1]
-    const afterPos = positionList[afterRow.startIndex]
+    // 表格之后的文本行位置位于表格下方（不错位）
+    const afterIndex = elementList.length - 1
+    const afterPos = positionList[afterIndex]
+    const tableLastRow = draw.getRowList()[afterPos.rowIndex - 1]
+    const tableLastBottom =
+      positionList[tableLastRow.startIndex].coordinate.leftBottom[1]
     expect(afterPos.coordinate.leftTop[1]).toBeGreaterThanOrEqual(
-      lastFragBottom - 1
+      tableLastBottom - 1
     )
   })
 
@@ -1500,7 +1462,7 @@ describe('表格跨页渲染层拆分', () => {
 
   it('rowspan 恰好结束于拆分行时高度同步收缩', () => {
     const table = buildTable(10)
-    // 第 8 行（索引 7）首列向下合并 2 行；第 9 行（索引 8）为超高行将被行内拆分
+    // 第 8 行（索引 7）首列向下合并 2 行；第 9 行（索引 8）为超高行整体移至下一页
     const tallText = Array.from({ length: 30 }, (_, i) => `内容${i + 1}`).join(
       '\n'
     )
@@ -1511,16 +1473,14 @@ describe('表格跨页渲染层拆分', () => {
     const tableElement = draw
       .getOriginalElementList()
       .find(element => element.type === ElementType.TABLE)!
-    // 拆分行被部分保留且行高缩短
+    // 截断保留末行仍在正常行高范围内
     const keepTrCount = tableElement.trList!.length
     const splitTr = tableElement.trList![keepTrCount - 1]
     expect(splitTr.height).toBeLessThan(500)
-    // 恰好结束于拆分行的合并单元格：高度按跨度重算（不包含被裁掉的高度）
+    // 合并单元格跨页时高度按实际跨度重算：被拆出的下一页行不再计入
     const spanTd = tableElement.trList![7].tdList[0]
-    expect(spanTd.rowspan).toBe(2)
-    expect(spanTd.height).toBe(
-      tableElement.trList![7].height! + splitTr.height!
-    )
+    expect(spanTd.rowspan).toBe(1)
+    expect(spanTd.height).toBe(tableElement.trList![7].height!)
   })
 
   it('单元格内容一行都放不下时保留补偿节点', () => {

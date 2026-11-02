@@ -14,7 +14,8 @@ import { useEditorContext } from './context'
 import OptionsConfigDialog from './OptionsConfigDialog.vue'
 import Icon from './Icon.vue'
 
-// 表单模式精简工具栏：隐藏「插入占位符 / 表格」组，仅保留格式化按键与缩放区
+// 表单模式精简工具栏（simplified）：隐藏「插入占位符 / 表格 / 打印模块 / 导入 Word / 选项配置」
+// 等编辑与管理类按钮，仅保留格式化按键与缩放区。
 const props = withDefaults(
   defineProps<{ simplified?: boolean }>(),
   { simplified: false }
@@ -309,6 +310,27 @@ const insertTextControl = () => {
         name: 'postfix',
         value: '\u200c',
         placeholder: '默认零宽空白符'
+      },
+      {
+        type: 'switch',
+        label: '图片可拖拽排序',
+        name: 'imageDraggable'
+      },
+      {
+        type: 'switch',
+        label: '图片可右键删除',
+        name: 'imageCanDelete'
+      },
+      {
+        type: 'switch',
+        label: '图片可缩放',
+        name: 'imageResizable',
+        value: 'true'
+      },
+      {
+        type: 'switch',
+        label: '图片可拖拽交换',
+        name: 'imageSwappable'
       }
     ],
     onConfirm: payload => {
@@ -317,6 +339,14 @@ const insertTextControl = () => {
       const value = payload.find(p => p.name === 'value')?.value || ''
       const prefix = payload.find(p => p.name === 'prefix')?.value || '\u200c'
       const postfix = payload.find(p => p.name === 'postfix')?.value || '\u200c'
+      // 需求 4.1/4.2/4.3/4.5：图片控件能力作为控件内部属性存储，
+      // 仅图片控件有意义，仅只读/表单模式生效（见需求清单 70-75）。
+      const toBool = (name: string) =>
+        payload.find(p => p.name === name)?.value === 'true'
+      const imageDraggable = toBool('imageDraggable')
+      const imageCanDelete = toBool('imageCanDelete')
+      const imageResizable = toBool('imageResizable')
+      const imageSwappable = toBool('imageSwappable')
       run(command =>
         command.executeInsertControl({
           type: ElementType.CONTROL,
@@ -332,7 +362,11 @@ const insertTextControl = () => {
               : null,
             placeholder,
             prefix,
-            postfix
+            postfix,
+            imageDraggable,
+            imageCanDelete,
+            imageResizable,
+            imageSwappable
           }
         })
       )
@@ -351,6 +385,13 @@ const insertTable = () => {
 const onCellHover = (row: number, col: number) => {
   tableRow.value = row
   tableCol.value = col
+}
+
+// ============ 需求 21：聚焦占位符触发 ============
+// 配置（占位符/启用模式/是否聚焦）统一在 OptionsConfigDialog 的「聚焦占位符」模块设置；
+// 此处按钮直接按该配置滚动并聚焦（无需传参）。
+const focusPlaceholderNow = () => {
+  ctx.getCommand()?.executeScrollToPlaceholder()
 }
 </script>
 
@@ -525,9 +566,9 @@ const onCellHover = (row: number, col: number) => {
       </button>
     </div>
 
-    <span class="ce-toolbar__divider" />
+    <span v-if="!simplified" class="ce-toolbar__divider" />
 
-    <div class="ce-toolbar__group">
+    <div v-if="!simplified" class="ce-toolbar__group">
       <button type="button" title="打印预览（调试）" @click="run(c => c.executePrintPreview())">
         <Icon name="print-preview" />
       </button>
@@ -536,9 +577,9 @@ const onCellHover = (row: number, col: number) => {
       </button>
     </div>
 
-    <span class="ce-toolbar__divider" />
+    <span v-if="!simplified" class="ce-toolbar__divider" />
 
-    <div class="ce-toolbar__group">
+    <div v-if="!simplified" class="ce-toolbar__group">
       <button type="button" title="导入 docx 文件" @click="importDocx">
         <Icon name="upload" />
       </button>
@@ -546,6 +587,14 @@ const onCellHover = (row: number, col: number) => {
         <Icon name="settings" />
       </button>
       <input ref="docxInputRef" type="file" accept=".docx" style="display: none" @change="onDocxFileChange" />
+    </div>
+
+    <span v-if="!simplified" class="ce-toolbar__divider" />
+
+    <div v-if="!simplified" class="ce-toolbar__group">
+      <button type="button" title="聚焦占位符" @click="focusPlaceholderNow">
+        <Icon name="target" />
+      </button>
     </div>
 
     <OptionsConfigDialog ref="optRef" />

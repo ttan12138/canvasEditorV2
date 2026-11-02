@@ -99,6 +99,25 @@ export function useCanvasEditor(option: UseCanvasEditorOption) {
     editor.value?.command.executeUpdateOptions(<IUpdateOption>payload)
   }
 
+  // 需求 21：按占位符滚动聚焦到其所在行。
+  // 不传 placeholder 时，从编辑器 options.focusPlaceholder 读取配置（并受 modes 模式门控）；
+  // 传入 placeholder 时直接使用（用于工具栏手动触发，跳过模式门控）。
+  // isFocus 默认 true（滚动并聚焦）；传 false 时仅滚动不聚焦
+  const executeScrollToPlaceholder = (
+    placeholder?: string,
+    isFocus = true
+  ): boolean => {
+    return (
+      editor.value?.command.executeScrollToPlaceholder(placeholder, isFocus) ??
+      false
+    )
+  }
+
+  // 需求：清空可撤销/重做堆栈
+  const executeClearHistory = (): void => {
+    editor.value?.command.executeClearHistory()
+  }
+
   const destroy = () => {
     const instance = editor.value
     if (!instance) return
@@ -143,6 +162,8 @@ export function useCanvasEditor(option: UseCanvasEditorOption) {
     value => {
       if (isInternalUpdate || !syncData()) return
       setValue(Array.isArray(value) ? { main: value } : value)
+      // 需求：切换文档数据后重置撤销/重做堆栈，避免跨文档残留历史
+      executeClearHistory()
     },
     { deep: true, flush: 'post' }
   )
@@ -150,9 +171,18 @@ export function useCanvasEditor(option: UseCanvasEditorOption) {
   watch(
     () => options(),
     value => {
-      if (editor.value) {
-        updateOptions(value)
-      }
+      const instance = editor.value
+      if (!instance) return
+      // 项目内已设置的背景色/缩放比例优先级最高：外部更新 options 时保留当前值，
+      // 避免外部传入的旧配置覆盖护眼模式背景色、用户手动设置的缩放等
+      const current = instance.command.getOptions()
+      updateOptions({
+        ...value,
+        background: { ...value.background, color: current.background.color },
+        scale: current.scale
+      })
+      // 需求：切换编辑器配置（如切模板/换文档）后重置撤销/重做堆栈
+      executeClearHistory()
     },
     { deep: true }
   )
@@ -165,6 +195,8 @@ export function useCanvasEditor(option: UseCanvasEditorOption) {
     onReady,
     setValue,
     updateOptions,
+    executeScrollToPlaceholder,
+    executeClearHistory,
     destroy
   }
 }

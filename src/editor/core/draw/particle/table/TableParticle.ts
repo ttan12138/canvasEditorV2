@@ -37,8 +37,9 @@ export class TableParticle {
   private options: DeepRequired<IEditorOption>
   // 片段内容高度缓存（片段对象随每次渲染重建，无过期风险）
   private fragmentContentHeightCache: WeakMap<object, number>
-  // 单元格内容行高前缀和缓存（按 rowList 数组身份，每次渲染重建无过期风险）
-  private tdLineHeightPrefixCache: WeakMap<IRow[], number[]>
+  // 单元格内容行高前缀和缓存（文档单位、归一化，按 rowList 数组身份）
+  // 用于行内拆分/窗口切片：消除逐行 px 取整累积误差导致的随 scale 抖动的越界/少算整行
+  private tdLineDocPrefixCache: WeakMap<IRow[], number[]>
   // 片段单元格枚举缓存（片段对象随每次渲染重建，命中/绘制高频复用）
   private fragmentTdListCache: WeakMap<ITableRowFragment, ITd[]>
 
@@ -47,7 +48,7 @@ export class TableParticle {
     this.range = draw.getRange()
     this.options = draw.getOptions()
     this.fragmentContentHeightCache = new WeakMap()
-    this.tdLineHeightPrefixCache = new WeakMap()
+    this.tdLineDocPrefixCache = new WeakMap()
     this.fragmentTdListCache = new WeakMap()
   }
 
@@ -548,35 +549,57 @@ export class TableParticle {
     }
   }
 
+  // 单元格内容行的文档单位（未缩放）高度前缀和（含上内边距，相对单元格顶）。
+  // prefix[k] 为第 k 行底（文档单位）；prefix[0] = 上内边距。
+  // 行高在 rowList 中为缩放后(px)单位，这里还原为文档单位并按 td.height 归一化，
+  // 消除逐行 px 取整的累积误差——否则在部分 scale 下 prefix[2] 会略大于 2*行高，
+  // 使窗口边界判定少算一整行，导致图片越界/续排重叠/缺图且随 scale 抖动。
+  // 设计：中间边界用“行高/scale”原始累计（与渲染、拆分点完全一致，不做归一化，
+  // 避免因子位移影响既有分页断言）；仅把末边界强制对齐 td.height（文档总高），
+  // 保证末片段能完整纳入全部行，杜绝“最后一行/最后几张图缺失”。
+  public getTdRowDocPrefix(td: ITd): number[] {
+    const rowList = td.rowList || []
+    const cached = this.tdLineDocPrefixCache.get(rowList)
+    if (cached) return cached
+    const tdPadding = td.tdPadding ?? this.options.table.tdPadding
+    const scale = this.options.scale || 1
+    const prefix: number[] = [tdPadding[0]]
+    let acc = tdPadding[0]
+    for (let i = 0; i < rowList.length; i++) {
+      acc += rowList[i].height / scale
+      prefix.push(acc)
+    }
+    // 末边界对齐 td.height：即使逐行 px 取整累计与 td.height 有微小出入，
+    // 也保证末片段窗口能容纳全部行（避免丢失末行）。
+    if (prefix.length > 1) {
+      prefix[prefix.length - 1] = td.height ?? prefix[prefix.length - 1]
+    }
+    this.tdLineDocPrefixCache.set(rowList, prefix)
+    return prefix
+  }
+
   // 计算单元格内容行在垂直窗口内的行范围（行内拆分使用）
-  // windowStart/windowEnd 未缩放、相对行顶；返回 [起始行, 结束行)（按整行取舍不裁剪行）
+  // windowStart/windowEnd 未缩放（文档单位）、相对单元格顶；返回 [起始行, 结束行)
+  // 分页边界对齐整行：结束行取「完整落入窗口」的整行，不裁剪行。
   public getTdLineRangeBySplitWindow(
     td: ITd,
     windowStart: number,
     windowEnd: number
   ): [number, number] {
-    const { scale } = this.options
     const rowList = td.rowList || []
-    // 行高前缀和（含上内边距）：prefix[k] 为第 k 行底（缩放后）
-    let prefix = this.tdLineHeightPrefixCache.get(rowList)
-    if (!prefix) {
-      // 需求 8.6：单元格内边距优先取所属表格元素，回退到全局
-      const tdPadding = td.tdPadding ?? this.options.table.tdPadding
-      prefix = [tdPadding[0] * scale]
-      for (let i = 0; i < rowList.length; i++) {
-        prefix.push(prefix[i] + rowList[i].height)
-      }
-      this.tdLineHeightPrefixCache.set(rowList, prefix)
-    }
-    const topLimit = windowStart * scale
-    const limit = windowEnd * scale
-    // 二分查找满足 行底(prefix[k]) <= 阈值 的最大行数（行高非负，前缀和单调）
+    const prefix = this.getTdRowDocPrefix(td)
+    const rowCount = rowList.length
+    // 整行取舍容差（文档单位，≈1px）：与拆分逻辑共用同一容差，保证渲染窗口切片
+    // 行数与拆分点一致；同时吸收逐行 px 取整让“本可放下的整行”累计高出可用高度的亚 px
+    // 噪声，避免 0.x px 误差误判少放一整行。远小于任意行高，不改变“真正放不下整行”的判定。
+    const TOL = 1 / (this.options.scale || 1)
+    // 二分：满足 prefix[k] <= 阈值 的最大 k（完整行）
     const upperBound = (threshold: number) => {
       let lo = 0
-      let hi = rowList.length
+      let hi = rowCount
       while (lo < hi) {
         const mid = (lo + hi + 1) >> 1
-        if (prefix[mid] <= threshold) {
+        if (prefix[mid] <= threshold + TOL) {
           lo = mid
         } else {
           hi = mid - 1
@@ -584,7 +607,32 @@ export class TableParticle {
       }
       return lo
     }
-    return [upperBound(topLimit), upperBound(limit)]
+    // 二分：满足 prefix[k] >= 阈值 的最小 k（用于无完整行时的部分行回退）
+    const lowerBound = (threshold: number) => {
+      let lo = 0
+      let hi = rowCount
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1
+        if (prefix[mid] >= threshold) {
+          hi = mid
+        } else {
+          lo = mid + 1
+        }
+      }
+      return lo
+    }
+    const startLine = upperBound(windowStart)
+    // 结束行优先取「完整落入窗口」的整行（upperBound）：分页边界必须对齐整行，
+    // 不能把放不下的半行排进本页，否则图片等整行内容会被画出并越界、续排时又
+    // 与下一页重叠。
+    let endLine = upperBound(windowEnd)
+    if (endLine <= startLine) {
+      // 窗口内没有任何完整行：回退包含「部分落入窗口」的行，避免空切片
+      //（单行文本单元格的唯一行被窗口底边截断时，仍需保留该行以正常渲染）
+      endLine = Math.max(lowerBound(windowEnd), startLine + 1)
+      if (endLine > rowCount) endLine = rowCount
+    }
+    return [startLine, endLine]
   }
 
   public getTableHeight(element: IElement): number {

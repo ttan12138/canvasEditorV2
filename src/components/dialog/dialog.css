@@ -129,3 +129,54 @@
   background: #5b9cf3;
   border-color: #5b9cf3;
 }
+
+/* 开关（toggle）：底层 checkbox 隐藏，用 track 呈现滑动开关 */
+.dialog-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 22px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.dialog-option__item .dialog-switch__input {
+  position: absolute;
+  width: 0;
+  height: 0;
+  margin: 0;
+  opacity: 0;
+  border: none;
+  padding: 0;
+}
+
+.dialog-switch__track {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 44px;
+  height: 22px;
+  border-radius: 11px;
+  background: #c0c4cc;
+  transition: background .2s;
+}
+
+.dialog-switch__track::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  transition: transform .2s;
+}
+
+.dialog-switch__input:checked + .dialog-switch__track {
+  background: #4991f2;
+}
+
+.dialog-switch__input:checked + .dialog-switch__track::after {
+  transform: translateX(22px);
+}

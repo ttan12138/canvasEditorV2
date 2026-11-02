@@ -1,5 +1,4 @@
 import { INTERNAL_CONTEXT_MENU_KEY } from '../../../dataset/constant/ContextMenu'
-import { EditorMode } from '../../../dataset/enum/Editor'
 import { VerticalAlign } from '../../../dataset/enum/VerticalAlign'
 import {
   TableBorder,
@@ -55,7 +54,7 @@ export const tableMenus: IRegisterContextMenu[] = [
       return (
         !payload.isReadonly &&
         payload.isInTable &&
-        payload.options.mode !== EditorMode.FORM
+        !payload.isFormMode
       )
     },
     childMenus: [
@@ -176,7 +175,7 @@ export const tableMenus: IRegisterContextMenu[] = [
       return (
         !payload.isReadonly &&
         payload.isInTable &&
-        payload.options.mode !== EditorMode.FORM
+        !payload.isFormMode
       )
     },
     childMenus: [
@@ -217,7 +216,7 @@ export const tableMenus: IRegisterContextMenu[] = [
       return (
         !payload.isReadonly &&
         payload.isInTable &&
-        payload.options.mode !== EditorMode.FORM
+        !payload.isFormMode
       )
     },
     childMenus: [
@@ -267,7 +266,7 @@ export const tableMenus: IRegisterContextMenu[] = [
       return (
         !payload.isReadonly &&
         payload.isInTable &&
-        payload.options.mode !== EditorMode.FORM
+        !payload.isFormMode
       )
     },
     childMenus: [
@@ -308,7 +307,7 @@ export const tableMenus: IRegisterContextMenu[] = [
       return (
         !payload.isReadonly &&
         payload.isCrossRowCol &&
-        payload.options.mode !== EditorMode.FORM
+        !payload.isFormMode
       )
     },
     callback: (command: Command) => {
@@ -323,7 +322,7 @@ export const tableMenus: IRegisterContextMenu[] = [
       return (
         !payload.isReadonly &&
         payload.isInTable &&
-        payload.options.mode !== EditorMode.FORM
+        !payload.isFormMode
       )
     },
     callback: (command: Command) => {
@@ -338,7 +337,7 @@ export const tableMenus: IRegisterContextMenu[] = [
       return (
         !payload.isReadonly &&
         payload.isInTable &&
-        payload.options.mode !== EditorMode.FORM
+        !payload.isFormMode
       )
     },
     callback: (command: Command) => {
@@ -353,7 +352,7 @@ export const tableMenus: IRegisterContextMenu[] = [
       return (
         !payload.isReadonly &&
         payload.isInTable &&
-        payload.options.mode !== EditorMode.FORM
+        !payload.isFormMode
       )
     },
     callback: (command: Command) => {

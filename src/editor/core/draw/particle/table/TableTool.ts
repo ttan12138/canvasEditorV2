@@ -95,10 +95,7 @@ export class TableTool {
     const { isTable } = positionContext
     if (!isTable) return
     // 表单/只读模式不渲染表格工具（禁止表格结构/删除等编辑操作）
-    if (
-      this.draw.getMode() === EditorMode.FORM ||
-      this.draw.isReadonly()
-    ) {
+    if (this.draw.getMode() === EditorMode.FORM || this.draw.isReadonly()) {
       this.dispose()
       return
     }

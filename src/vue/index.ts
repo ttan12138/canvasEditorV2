@@ -24,9 +24,15 @@ export type { EditorEmits, EditorEventName, PageInfo } from './types'
 
 export {
   getPlaceholderTextControls,
+  getPlaceholderTextControlMap,
   setControlValueByPlaceholder,
   setControlValuesByPlaceholder,
+  setControlContentByPlaceholder,
+  clearControlValueByPlaceholder,
+  clearControlValuesByPlaceholder,
   setControlEditableByPlaceholder,
+  setAllControlEditable,
+  setControlsEditableByPlaceholders,
   setImageControlConfigForAll,
   setImageControlConfigByPlaceholder
 } from './control'
@@ -35,11 +41,13 @@ export type {
   IReplaceValueType,
   IReplaceValueDetail,
   IReplaceControlPayload,
+  ISetControlContentByPlaceholderPayload,
   ISetChildTablePayload,
   ISetCellConfigPayload,
   ITableCellInfo,
   IImageControlConfig
 } from './control'
+export type { IAnnotationStyle } from '../editor/interface/Editor'
 
 export const CanvasEditorPlugin: Plugin = {
   install(app: App) {

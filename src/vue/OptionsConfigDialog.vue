@@ -8,22 +8,31 @@ const getCommand = () => ctx.getCommand()
 const optDialog = reactive({ open: false })
 const optModel = reactive<Record<string, any>>({})
 const optApplyMsg = ref('')
+// 「聚焦占位符」模块中占位符下拉的动态选项（取自文档内去重占位符）
+const placeholderOptions = ref<{ label: string; value: string }[]>([])
 // 左侧分组列表的当前选中项
 const selectedGroup = ref(0)
 const selectGroup = (i: number) => {
   selectedGroup.value = i
 }
+// 下拉选项：动态来源（placeholder）取 placeholderOptions，否则取字段静态 options
+const selectOptions = (f: OptField): { label: string; value: string }[] =>
+  f.dynamicOptions === 'placeholder' ? placeholderOptions.value : (f.options || [])
 
 interface OptField {
   path: string
   label: string
-  type: 'number' | 'text' | 'color' | 'select' | 'padding' | 'list' | 'json'
+  type: 'number' | 'text' | 'color' | 'select' | 'padding' | 'list' | 'json' | 'percent'
   options?: { label: string; value: string }[]
+  // 动态下拉选项来源：'placeholder' 表示取自文档内去重占位符（支持清空）
+  dynamicOptions?: 'placeholder'
   step?: number
   min?: number
   max?: number
   // list 类型：元素类型，number 表示数字数组，string 表示字符串数组（逗号分隔）
   itemType?: 'number' | 'string'
+  // 字段说明（在标签下方以小字展示）
+  desc?: string
 }
 // 覆盖常用且可运行时更新的参数（IUpdateOption 已排除 mode/width/height/scale/pageGap/pageMode/paperDirection/historyMaxRecordCount/scrollContainerSelector）
 const optionGroups: { group: string; fields: OptField[] }[] = [
@@ -75,7 +84,8 @@ const optionGroups: { group: string; fields: OptField[] }[] = [
       { path: 'rangeMinWidth', label: '选区最小宽度', type: 'number', min: 1 },
       { path: 'highlightAlpha', label: '高亮透明度', type: 'number', min: 0, max: 1, step: 0.1 },
       { path: 'highlightMarginHeight', label: '高亮上下边距', type: 'number', min: 0 },
-      { path: 'inactiveAlpha', label: '非活跃透明度', type: 'number', min: 0, max: 1, step: 0.1 }
+      { path: 'inactiveAlpha', label: '非活跃透明度', type: 'number', min: 0, max: 1, step: 0.1 },
+      { path: 'bodyRenderScale', label: '正文渲染缩放比例', type: 'percent', min: 0, desc: '百分比输入（如 80 表示 80%），实际记录比例值 0.8；缺省 100 = 100%' }
     ]
   },
   {
@@ -155,7 +165,32 @@ const optionGroups: { group: string; fields: OptField[] }[] = [
       { path: 'placeholder.opacity', label: '透明度', type: 'number', min: 0, max: 1, step: 0.1 },
       { path: 'placeholder.size', label: '字号', type: 'number', min: 1 },
       { path: 'placeholder.font', label: '字体', type: 'text' },
-      { path: 'placeholder.maxLength', label: '显示长度上限(0=不限制)', type: 'number', min: 0 }
+      { path: 'placeholder.maxLength', label: '显示长度上限(-1=不限制)', type: 'number', min: -1 }
+    ]
+  },
+  {
+    group: '聚焦占位符', fields: [
+      {
+        path: 'focusPlaceholder.placeholder',
+        label: '聚焦占位符',
+        type: 'select',
+        dynamicOptions: 'placeholder',
+        desc: '执行 executeScrollToPlaceholder 时滚动到的占位符；下拉选择，可清空（清空则不聚焦）'
+      },
+      {
+        path: 'focusPlaceholder.modes',
+        label: '启用模式',
+        type: 'list',
+        itemType: 'string',
+        desc: '留空 = 全部模式均生效；填写后仅在所列模式下生效（如 form,readonly）'
+      },
+      {
+        path: 'focusPlaceholder.isFocus',
+        label: '是否自动滚动并聚焦',
+        type: 'select',
+        options: [{ label: '是', value: 'true' }, { label: '否', value: 'false' }],
+        desc: '自动滚动占位符：是否自动滚动并聚焦'
+      }
     ]
   },
   {
@@ -399,6 +434,9 @@ const loadOptionsModel = () => {
     } else if (f.type === 'json') {
       // 对象 -> JSON 字符串
       optModel[f.path] = val == null ? '' : JSON.stringify(val)
+    } else if (f.type === 'percent') {
+      // 比例值 -> 百分比展示（如 0.8 -> 80）
+      optModel[f.path] = val == null ? '' : Math.round((val as number) * 1000) / 10
     } else if (isBoolSelect(f)) {
       optModel[f.path] = val ? 'true' : 'false'
     } else {
@@ -409,6 +447,14 @@ const loadOptionsModel = () => {
 
 const open = () => {
   loadOptionsModel()
+  // 填充「聚焦占位符」下拉：文档内去重占位符；并补入当前已配置值（若已不在文档中）
+  const phs = getCommand()?.getDistinctPlaceholders() || []
+  const list: { label: string; value: string }[] = phs.map(p => ({ label: p, value: p }))
+  const curPh = getCommand()?.getOptions()?.focusPlaceholder?.placeholder
+  if (curPh && !list.some(o => o.value === curPh)) {
+    list.push({ label: curPh, value: curPh })
+  }
+  placeholderOptions.value = list
   optApplyMsg.value = ''
   optDialog.open = true
 }
@@ -424,6 +470,13 @@ const applyOptions = () => {
       if (Number.isNaN(v)) return
       if (f.min != null) v = Math.max(f.min, v)
       if (f.max != null) v = Math.min(f.max, v)
+    } else if (f.type === 'percent') {
+      // 百分比 -> 比例值（如 80 -> 0.8）
+      let pct = Number(v)
+      if (Number.isNaN(pct)) return
+      if (f.min != null) pct = Math.max(f.min, pct)
+      if (f.max != null) pct = Math.min(f.max, pct)
+      v = pct / 100
     } else if (f.type === 'list') {
       // 逗号分隔 -> 数组；按 itemType 决定元素为数字或字符串
       const itemType = f.itemType === 'number' ? 'number' : 'string'
@@ -445,6 +498,11 @@ const applyOptions = () => {
       }
     } else if (f.type === 'select' && isBoolSelect(f)) {
       v = v === 'true'
+    }
+    // 聚焦占位符：允许清空（写入空串，表示不聚焦）
+    if (f.path === 'focusPlaceholder.placeholder') {
+      setOptByPath(payload, f.path, v ?? '')
+      return
     }
     // 跳过未设置/清空的值，避免把 undefined / '' 写回 options
     if (v === undefined || v === '') return
@@ -484,7 +542,8 @@ defineExpose({ open, loadOptionsModel })
                 </template>
                 <template v-else-if="f.type === 'select'">
                   <select v-model="optModel[f.path]" class="cc-opt-input">
-                    <option v-for="o in (f.options || [])" :key="o.value" :value="o.value">{{ o.label }}</option>
+                    <option v-if="f.dynamicOptions === 'placeholder'" :value="''">（不设置 / 清空）</option>
+                    <option v-for="o in selectOptions(f)" :key="o.value" :value="o.value">{{ o.label }}</option>
                   </select>
                 </template>
                 <template v-else-if="f.type === 'color'">
@@ -494,6 +553,11 @@ defineExpose({ open, loadOptionsModel })
                 <template v-else-if="f.type === 'number'">
                   <input type="number" v-model.number="optModel[f.path]" :min="f.min" :max="f.max" :step="f.step"
                     class="cc-opt-input" />
+                </template>
+                <template v-else-if="f.type === 'percent'">
+                  <input type="number" v-model.number="optModel[f.path]" :min="f.min" :max="f.max" :step="f.step"
+                    class="cc-opt-input" />
+                  <span class="cc-opt-pct">%</span>
                 </template>
                 <template v-else-if="f.type === 'list'">
                   <input type="text" v-model="optModel[f.path]" class="cc-opt-input"
@@ -507,6 +571,7 @@ defineExpose({ open, loadOptionsModel })
                   <input type="text" v-model="optModel[f.path]" class="cc-opt-input" />
                 </template>
               </div>
+              <div v-if="f.desc" class="cc-opt-field__desc">{{ f.desc }}</div>
             </div>
           </div>
         </div>
@@ -612,8 +677,16 @@ defineExpose({ open, loadOptionsModel })
 .cc-opt-field {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 6px;
+}
+
+.cc-opt-field__desc {
+  flex-basis: 100%;
+  color: #9097a1;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .cc-opt-field__label {
@@ -656,6 +729,11 @@ defineExpose({ open, loadOptionsModel })
   padding: 0 6px;
   border: 1px solid #d0d3d9;
   border-radius: 4px;
+}
+
+.cc-opt-pct {
+  flex: none;
+  color: #767c85;
 }
 
 .cc-opt-color {
