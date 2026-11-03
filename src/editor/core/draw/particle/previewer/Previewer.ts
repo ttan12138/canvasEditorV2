@@ -479,11 +479,10 @@ export class Previewer {
 
   public _updateResizerRect(width: number, height: number) {
     const { resizerSize: handleSize, scale } = this.options
+    const isReadonly = this.draw.isReadonly()
     this.resizerSelection.style.width = `${width}px`
     this.resizerSelection.style.height = `${height}px`
     // handle
-    // 需求 4.3（修订）：只读模式同样显示缩放句柄。是否能缩放已由 drawResizer 的
-    // resizeDisable（基于 control.editable / imageResizable）提前拦截，此处一律显示。
     for (let i = 0; i < 8; i++) {
       const left =
         i === 0 || i === 6 || i === 7
@@ -500,7 +499,7 @@ export class Previewer {
       this.resizerHandleList[i].style.transform = `scale(${scale})`
       this.resizerHandleList[i].style.left = `${left}px`
       this.resizerHandleList[i].style.top = `${top}px`
-      this.resizerHandleList[i].style.display = 'block'
+      this.resizerHandleList[i].style.display = isReadonly ? 'none' : 'block'
     }
   }
 
@@ -515,7 +514,9 @@ export class Previewer {
       !this.curElement ||
       (this.curElement.imgToolDisabled && !this.draw.isDesignMode()) ||
       (mode === EditorMode.PRINT &&
-        this.options.modeRule[EditorMode.PRINT]?.imagePreviewerDisabled)
+        this.options.modeRule[EditorMode.PRINT]?.imagePreviewerDisabled) ||
+      (mode === EditorMode.READONLY &&
+        this.options.modeRule[EditorMode.READONLY]?.imagePreviewerDisabled)
     ) {
       return
     }
@@ -538,14 +539,13 @@ export class Previewer {
       return
     }
     // 图片工具配置禁用又非设计模式时不渲染
-    // 需求 4.3（修订）：只读模式同样允许显示缩放句柄，是否禁用改由调用方传入的
-    // options.resizeDisable（基于 control.editable / imageResizable）决定，
-    // 不再使用 modeRule[READONLY].imagePreviewerDisabled 全局屏蔽。
     const mode = this.draw.getMode()
     if (
       (element.imgToolDisabled && !this.draw.isDesignMode()) ||
       (mode === EditorMode.PRINT &&
-        this.options.modeRule[EditorMode.PRINT]?.imagePreviewerDisabled)
+        this.options.modeRule[EditorMode.PRINT]?.imagePreviewerDisabled) ||
+      (mode === EditorMode.READONLY &&
+        this.options.modeRule[EditorMode.READONLY]?.imagePreviewerDisabled)
     ) {
       return
     }

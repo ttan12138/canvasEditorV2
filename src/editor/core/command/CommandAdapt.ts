@@ -3066,11 +3066,6 @@ export class CommandAdapt {
     this._desiredAllEditable = editable
     const count = this._applyAllEditable(editable)
     this._ensureAllEditableSticky()
-    console.log(
-      '[setAllControlsEditable] editable=%s immediateCount=%d',
-      editable,
-      count
-    )
     return count
   }
 
@@ -3173,12 +3168,6 @@ export class CommandAdapt {
         return
       }
       const c = apply()
-      console.log(
-        '[setControlsEditableByPlaceholders] retry editable=%s count=%d try=%d',
-        editable,
-        c,
-        tries
-      )
       if (c) eventBus.off('contentChange', retry)
     }
     eventBus.on('contentChange', retry)

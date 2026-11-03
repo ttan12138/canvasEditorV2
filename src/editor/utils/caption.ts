@@ -1,5 +1,5 @@
 import { ElementType } from '../dataset/enum/Element'
-import type { IElement } from '../interface/Element'
+import type { IElement, IImageCaption } from '../interface/Element'
 
 /**
  * 图片四向内边距，返回未缩放（doc）单位的 [上, 右, 下, 左]。
@@ -85,4 +85,46 @@ export function wrapCaptionLines(
     if (current) lines.push(current)
   }
   return lines
+}
+
+/**
+ * 题注四向间距取值（doc 单位）：上下外边距、左右内边距。
+ * 兼容旧的单值字段 marginY/paddingX（作为未单独配置时的回退）。
+ * 布局预留与绘制必须调用同一实现，确保两侧行数与间隙一致。
+ */
+export function getCaptionSpacing(caption: IImageCaption): {
+  marginTop: number
+  marginBottom: number
+  paddingLeft: number
+  paddingRight: number
+} {
+  return {
+    marginTop: caption.marginTop ?? caption.marginY ?? 0,
+    marginBottom: caption.marginBottom ?? caption.marginY ?? 0,
+    paddingLeft: caption.paddingLeft ?? caption.paddingX ?? 0,
+    paddingRight: caption.paddingRight ?? caption.paddingX ?? 0
+  }
+}
+
+/**
+ * 需求：题注最大显示行数，超出截断并在末行追加省略号（…）。
+ * 末行逐字回退直到「剩余文本 + …」不超过 maxWidth，保证省略号不越界。
+ * 布局预留与绘制必须调用同一实现，确保两侧行数一致。
+ * @param maxLines 最大行数（0/负数表示不限制）
+ */
+export function truncateCaptionLines(
+  ctx: CanvasRenderingContext2D,
+  lines: string[],
+  maxLines: number,
+  maxWidth: number
+): string[] {
+  if (!maxLines || maxLines <= 0 || lines.length <= maxLines) return lines
+  const kept = lines.slice(0, maxLines)
+  const ELLIPSIS = '…'
+  let last = kept[maxLines - 1] ?? ''
+  while (last.length > 0 && ctx.measureText(last + ELLIPSIS).width > maxWidth) {
+    last = last.slice(0, -1)
+  }
+  kept[maxLines - 1] = last + ELLIPSIS
+  return kept
 }

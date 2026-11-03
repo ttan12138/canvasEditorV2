@@ -1939,20 +1939,6 @@ export class Control {
               ? 1 / count
               : 1
             : 1
-          // [调试-需求5.6] 图片缩放占比诊断：确认 count/isInCell 与最终写入的
-          // isScaling、imgScaleRatio，定位 scale 变化导致每行张数变化的问题。
-          console.log(
-            '[img-debug] setScaleRatio',
-            JSON.stringify({
-              isInCell,
-              setW: setW ?? null,
-              count: count ?? null,
-              scaleRatio,
-              widthAuto,
-              outW: Math.round(w),
-              outH: Math.round(h)
-            })
-          )
           elements.push({
             type: ElementType.IMAGE,
             value: src,

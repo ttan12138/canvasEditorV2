@@ -1,16 +1,14 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
-  ControlType,
-  ElementType,
   ListStyle,
   ListType,
   RowFlex,
   TitleLevel,
   type Command
 } from '../editor'
-import { Dialog } from '../components/dialog/Dialog'
 import { useEditorContext } from './context'
+import { openControlConfigDialog } from '../components/dialog/controlConfigDialog'
 import OptionsConfigDialog from './OptionsConfigDialog.vue'
 import Icon from './Icon.vue'
 
@@ -281,97 +279,7 @@ const onSizeInput = (evt: Event) => {
 }
 
 const insertTextControl = () => {
-  new Dialog({
-    title: '文本控件',
-    data: [
-      {
-        type: 'text',
-        label: '占位符',
-        name: 'placeholder',
-        required: true,
-        placeholder: '请输入占位符'
-      },
-      {
-        type: 'text',
-        label: '默认值',
-        name: 'value',
-        placeholder: '请输入默认值'
-      },
-      {
-        type: 'text',
-        label: '前缀',
-        name: 'prefix',
-        value: '\u200c',
-        placeholder: '默认零宽空白符'
-      },
-      {
-        type: 'text',
-        label: '后缀',
-        name: 'postfix',
-        value: '\u200c',
-        placeholder: '默认零宽空白符'
-      },
-      {
-        type: 'switch',
-        label: '图片可拖拽排序',
-        name: 'imageDraggable'
-      },
-      {
-        type: 'switch',
-        label: '图片可右键删除',
-        name: 'imageCanDelete'
-      },
-      {
-        type: 'switch',
-        label: '图片可缩放',
-        name: 'imageResizable',
-        value: 'true'
-      },
-      {
-        type: 'switch',
-        label: '图片可拖拽交换',
-        name: 'imageSwappable'
-      }
-    ],
-    onConfirm: payload => {
-      const placeholder = payload.find(p => p.name === 'placeholder')?.value
-      if (!placeholder) return
-      const value = payload.find(p => p.name === 'value')?.value || ''
-      const prefix = payload.find(p => p.name === 'prefix')?.value || '\u200c'
-      const postfix = payload.find(p => p.name === 'postfix')?.value || '\u200c'
-      // 需求 4.1/4.2/4.3/4.5：图片控件能力作为控件内部属性存储，
-      // 仅图片控件有意义，仅只读/表单模式生效（见需求清单 70-75）。
-      const toBool = (name: string) =>
-        payload.find(p => p.name === name)?.value === 'true'
-      const imageDraggable = toBool('imageDraggable')
-      const imageCanDelete = toBool('imageCanDelete')
-      const imageResizable = toBool('imageResizable')
-      const imageSwappable = toBool('imageSwappable')
-      run(command =>
-        command.executeInsertControl({
-          type: ElementType.CONTROL,
-          value: '',
-          control: {
-            type: ControlType.TEXT,
-            value: value
-              ? [
-                {
-                  value
-                }
-              ]
-              : null,
-            placeholder,
-            prefix,
-            postfix,
-            imageDraggable,
-            imageCanDelete,
-            imageResizable,
-            imageSwappable
-          }
-        })
-      )
-    }
-  })
+  run(command => openControlConfigDialog(command, { mode: 'insert' }))
 }
 
 const insertTable = () => {

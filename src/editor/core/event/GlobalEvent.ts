@@ -30,6 +30,10 @@ export class GlobalEvent {
   private dateParticle: DateParticle
   private imageParticle: ImageParticle
   private dprMediaQueryList: MediaQueryList
+  // 缩放请求合并：连续滚轮手势合并到每帧一次重绘，避免多次全量重绘排队造成卡顿
+  private pendingScale: number | null
+  private pendingAnchorY: number | null
+  private scaleRafId: number | null
 
   constructor(draw: Draw, canvasEvent: CanvasEvent) {
     this.draw = draw
@@ -48,6 +52,9 @@ export class GlobalEvent {
     this.dprMediaQueryList = window.matchMedia(
       `(resolution: ${window.devicePixelRatio}dppx)`
     )
+    this.pendingScale = null
+    this.pendingAnchorY = null
+    this.scaleRafId = null
   }
 
   public register() {
@@ -74,6 +81,12 @@ export class GlobalEvent {
       this._handleVisibilityChange
     )
     this.dprMediaQueryList.removeEventListener('change', this._handleDprChange)
+    if (this.scaleRafId !== null) {
+      cancelAnimationFrame(this.scaleRafId)
+      this.scaleRafId = null
+      this.pendingScale = null
+      this.pendingAnchorY = null
+    }
   }
 
   public clearSideEffect = (evt: Event) => {
@@ -141,21 +154,38 @@ export class GlobalEvent {
     // 仅在按下Ctrl键时生效
     if (!evt.ctrlKey) return
     evt.preventDefault()
-    const { scale } = this.options
-    // 以鼠标指针位置作为缩放中心，保持该位置内容在视图中不动
-    const anchorY = this._getScaleAnchorY(evt)
+    // 基于尚未提交的缩放值累积，将一个连续滚轮手势合并到每帧一次重绘
+    const baseScale = this.pendingScale ?? this.options.scale
     if (evt.deltaY < 0) {
       // 放大
-      const nextScale = scale * 10 + 1
+      const nextScale = baseScale * 10 + 1
       if (nextScale <= 30) {
-        this.draw.setPageScale(nextScale / 10, anchorY)
+        this.pendingScale = nextScale / 10
+        this.pendingAnchorY = this._getScaleAnchorY(evt)
       }
     } else {
       // 缩小
-      const nextScale = scale * 10 - 1
+      const nextScale = baseScale * 10 - 1
       if (nextScale >= 5) {
-        this.draw.setPageScale(nextScale / 10, anchorY)
+        this.pendingScale = nextScale / 10
+        this.pendingAnchorY = this._getScaleAnchorY(evt)
       }
+    }
+    // 仅当有待提交的缩放请求且尚未安排帧时，调度一次重绘
+    if (this.pendingScale !== null && this.scaleRafId === null) {
+      this.scaleRafId = requestAnimationFrame(this._applyPendingScale)
+    }
+  }
+
+  // 在下一帧统一提交缩放（以最后一次鼠标位置为锚点），避免连续缩放频繁全量重绘
+  private _applyPendingScale = () => {
+    this.scaleRafId = null
+    const scale = this.pendingScale
+    const anchorY = this.pendingAnchorY
+    this.pendingScale = null
+    this.pendingAnchorY = null
+    if (scale !== null) {
+      this.draw.setPageScale(scale, anchorY ?? undefined)
     }
   }
 

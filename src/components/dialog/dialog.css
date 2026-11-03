@@ -80,6 +80,21 @@
   font-family: inherit;
 }
 
+/* 容器型条目（section/countConfig/captionStyle/hgroup 外的标签+内容堆叠）：
+   覆盖 dialog-option__item 的 flex 横排，防止固定宽度弹窗下内容溢出 */
+.dialog-option__item--block {
+  display: block;
+}
+
+/* 弹窗主字段输入弹性收缩（配合容器定宽）：仅直接子项，不影响分组内部 */
+.dialog-option > .dialog-option__item input,
+.dialog-option > .dialog-option__item textarea,
+.dialog-option > .dialog-option__item select {
+  width: auto;
+  flex: 1;
+  min-width: 0;
+}
+
 .dialog-option__item input:focus,
 .dialog-option__item textarea:focus {
   border-color: #4991f2;
@@ -179,4 +194,186 @@
 
 .dialog-switch__input:checked + .dialog-switch__track::after {
   transform: translateX(22px);
+}
+
+/* 分组（带条件显示）：用于“是否为图像控件”嵌套 */
+.dialog-section {
+  width: 100%;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px dashed #d3d3d3;
+  border-radius: 4px;
+  background: #fafbfc;
+}
+
+.dialog-section__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #3d4757;
+  margin-bottom: 10px;
+}
+
+.dialog-section__body .dialog-option__item {
+  padding-left: 4px;
+  margin-bottom: 10px;
+}
+
+.dialog-section__body .dialog-option__item:last-child {
+  margin-bottom: 0;
+}
+
+/* 分组内连续开关：双列网格，紧凑排列 */
+.dialog-switch-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 16px;
+  row-gap: 8px;
+  margin-bottom: 10px;
+}
+
+.dialog-switch-grid .dialog-option__item {
+  margin-bottom: 0;
+  padding-left: 0;
+}
+
+/* 水平分组：子项左右排布（如 开关组 + count 预设） */
+.dialog-hgroup {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  width: 100%;
+}
+
+.dialog-hgroup__cell {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 左右布局下的开关单元：单列，固定占整宽 30%（剩余给 count 预设列） */
+.dialog-hgroup__cell.dialog-switch-grid {
+  flex: 0 0 30%;
+  max-width: 30%;
+  grid-template-columns: 1fr;
+  row-gap: 10px;
+  margin-bottom: 0;
+}
+
+.dialog-option__label {
+  width: 100%;
+  font-size: 13px;
+  font-weight: 600;
+  color: #5a6473;
+  margin-bottom: 8px;
+}
+
+/* 按 count 的图片预设：限高 4 行（4×28px + 3×6px），超出滚动 */
+.cc-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 130px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.cc-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cc-row__label {
+  width: 56px;
+  flex-shrink: 0;
+  font-size: 13px;
+  color: #3d4757;
+}
+
+/* 输入自适应宽度：适配左右布局下的窄列（右列 count 预设） */
+.cc-row input {
+  flex: 1;
+  min-width: 0;
+  width: auto !important;
+  height: 28px;
+  border: 1px solid #d3d3d3;
+  border-radius: 2px;
+  padding: 4px;
+  box-sizing: border-box;
+  outline: none;
+}
+
+.cc-row input:focus {
+  border-color: #4991f2;
+}
+
+.dialog-toggle {
+  margin: 8px 0 0;
+  padding: 2px 12px;
+  font-size: 12px;
+  color: #4991f2;
+  background: transparent;
+  border: 1px solid #4991f2;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+/* 题注默认样式：单列平铺，限高 6 行（6×28px + 5×8px 行距），超出滚动 */
+.cap-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  max-height: 208px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.cap-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cap-field > span {
+  width: 70px;
+  font-size: 13px;
+  color: #3d4757;
+}
+
+.cap-field input,
+.cap-field select {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  border: 1px solid #d3d3d3;
+  border-radius: 2px;
+  padding: 4px;
+  box-sizing: border-box;
+  outline: none;
+}
+
+/* 阴影可视化：横偏/纵偏/模糊/颜色 四输入一行 */
+.cap-field--shadow {
+  align-items: flex-start;
+}
+
+.cap-shadow {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cap-shadow input {
+  width: 64px !important;
+  min-width: 0;
+  height: 28px;
+  border: 1px solid #d3d3d3;
+  border-radius: 2px;
+  padding: 4px;
+  box-sizing: border-box;
+  outline: none;
+}
+
+.cap-shadow input:focus {
+  border-color: #4991f2;
 }

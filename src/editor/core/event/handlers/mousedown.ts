@@ -405,13 +405,6 @@ export function mousedown(evt: MouseEvent, host: CanvasEvent) {
       // 需求 4.3：imageResizable 缺省视为 true（显示缩放句柄），仅显式为 false 时隐藏
       // 需求 11：控件不可编辑时禁用缩放句柄
       resizeDisable = ctrl?.editable === false || ctrl?.imageResizable === false
-      console.log(
-        '[resizeGate] controlId=%s controlEditable=%s imageResizable=%s resizeDisable=%s',
-        curElement.controlId,
-        ctrl?.editable,
-        ctrl?.imageResizable,
-        resizeDisable
-      )
     }
     const previewerDrawOption: IPreviewerDrawOption = {
       // 控件图片：拖拽缩放仅受 control.editable / imageResizable 控制（与 resizeDisable

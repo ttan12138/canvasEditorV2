@@ -1,4 +1,5 @@
 import type { Command, IElement } from '../editor'
+import type { IImageCaption } from '../editor/interface/Element'
 import type { IControl } from '../editor/interface/Control'
 import type { IAnnotationStyle } from '../editor/interface/Editor'
 import type { ITableCellInfo } from '../editor/interface/table/Td'
@@ -41,6 +42,8 @@ export interface IReplaceValueDetail {
   padding?: [number, number] | [number, number, number, number]
   /** 图片描述文字（题注）：位于图像正下方，相对（图像+padding）宽度居中，超出换行 */
   text?: string
+  /** 题注样式（覆盖控件级 imageCaptionStyle 默认；仅当同时提供 text 时生效） */
+  imgCaptionStyle?: Partial<IImageCaption>
   /** 是否可删除（控件级，预留） */
   canDelete?: boolean
   /** 是否可编辑（控件级，预留） */
@@ -357,24 +360,6 @@ function computeImageSize(input: IImageSizeInput): {
     slotW = contentW
     slotH = autoHeight(contentW)
   }
-  // [调试-需求5.3] 图片尺寸计算诊断：确认 cellWidth/count 是否已含 scale，
-  // 以及 padding 扣减后输出是否仍为 doc 单位（避免布局再乘 scale 导致双重缩放）。
-  console.log(
-    '[img-debug] computeImageSize',
-    JSON.stringify({
-      inCell,
-      cellWidth: cellWidth ?? null,
-      count: count ?? null,
-      setW: setW ?? null,
-      setH: setH ?? null,
-      w0: w0 ?? null,
-      h0: h0 ?? null,
-      padLeft,
-      padRight,
-      outWidth: Math.round(slotW),
-      outHeight: Math.round(slotH)
-    })
-  )
   return { width: slotW, height: slotH }
 }
 
@@ -405,6 +390,7 @@ export async function setControlValueByPlaceholder(
     padding?: [number, number] | [number, number, number, number]
     text?: string
     canDelete?: boolean
+    imgCaptionStyle?: Partial<IImageCaption>
   }[] = []
   if (valueType === 'IMAGE') {
     // IMAGE：优先用 values 中的图片项；否则用单个 value
@@ -418,6 +404,7 @@ export async function setControlValueByPlaceholder(
         height: v.height,
         padding: v.padding,
         text: v.text,
+        imgCaptionStyle: v.imgCaptionStyle,
         // 需求 4.2：图片级删除配置；顶层 payload.canDelete 作为整组默认值
         canDelete: v.canDelete ?? payload.canDelete
       }))
@@ -512,10 +499,23 @@ export async function setControlValueByPlaceholder(
         getCellWidth(cellInfo.table, cellInfo.td, cellInfo.colIndex)
       : 0
     const cellWidth = Math.max(0, rawCellWidth - tdPaddingWidth)
+    // 读取控件级可视化配置：按 count 的尺寸/内边距预设 + 题注默认样式。
+    // 这些配置在插入控件弹窗里设置并绑定到控件（imageCountConfigs / imageCaptionStyle）。
+    const ctrl = command.getControlValue({ id })?.[0]
+    const matchedCount =
+      payload.count && ctrl?.imageCountConfigs
+        ? ctrl.imageCountConfigs.find(c => c.count === payload.count)
+        : undefined
+    const captionStyle = ctrl?.imageCaptionStyle
     const elements: IElement[] = imageItems.map((item, i) => {
       const size = sizes[i] ?? { w: 0, h: 0 }
+      // 需求：尺寸/内边距优先级 = 明细显式 > 控件 count 预设 > 自适应。
+      // 若 set 显式给出属性，以其为主；否则回退到控件可视化配置中对应 count 的预设。
+      const setW = item.width ?? matchedCount?.width
+      const setH = item.height ?? matchedCount?.height
+      const presetPadding = matchedCount?.padding
       // 需求 5.3：padding 支持二元组 [left, right] 与四元组 [top, right, bottom, left]
-      const p = item.padding ?? []
+      const p = item.padding ?? presetPadding ?? []
       let padLeft = 0
       let padRight = 0
       let padTop = 0
@@ -532,8 +532,8 @@ export async function setControlValueByPlaceholder(
       const { width, height } = computeImageSize({
         w0: size.w,
         h0: size.h,
-        setW: item.width,
-        setH: item.height,
+        setW,
+        setH,
         inCell,
         cellWidth,
         count: payload.count,
@@ -545,14 +545,14 @@ export async function setControlValueByPlaceholder(
       if (height) el.height = Math.round(height)
       // 需求 5.3：写入完整 IPadding 四元组 [top, right, bottom, left]，
       // 保留用户设置的上下内边距（不再硬性置 0）
-      if (item.padding) {
+      if (item.padding ?? presetPadding) {
         el.padding = [padTop, padRight, padBottom, padLeft]
       }
-      // 需求 5.6：单元格内“宽度自适应”（未显式指定宽）的图片开启 isScaling，
+      // 需求 5.6：单元格内“宽度自适应”（未显式指定宽、也无 count 预设宽）的图片开启 isScaling，
       // 按容器实时重算宽度（imgScaleRatio=1/count）。这样 count 张图之和恒等于
       // availableWidth，不受 getWidth 的 Math.floor 取整影响，避免不同 scale 下
       // 每行张数漂移（如 scale=0.8 时第 4 张差 0.4px 塞不进，掉到 3 张）。
-      const widthAuto = inCell && !item.width
+      const widthAuto = inCell && !setW
       el.isScaling = widthAuto
       el.imgScaleRatio = widthAuto
         ? payload.count && payload.count > 0
@@ -561,46 +561,17 @@ export async function setControlValueByPlaceholder(
         : undefined
       // 需求 4.2：图片级删除配置
       if (item.canDelete !== undefined) el.canDelete = item.canDelete
-      // 需求：图片描述文字（题注）——位于图像正下方、相对（图像+padding）宽度居中、超出换行
+      // 需求：图片题注 = 显式 text + 控件默认样式；
+      // 若 set 同时给出 imgCaptionStyle 则覆盖默认（set 优先，未指定回退控件配置）。
       if (item.text) {
-        el.imgCaption = { value: item.text }
+        const cap: Record<string, unknown> = { value: item.text }
+        if (captionStyle) Object.assign(cap, captionStyle)
+        if (item.imgCaptionStyle) Object.assign(cap, item.imgCaptionStyle)
+        el.imgCaption = cap as unknown as IImageCaption
       }
-      // [调试] 创建元素时打印写入的关键属性，确认 isScaling/imgScaleRatio 已写入
-      console.log(
-        '[img-debug] create-el',
-        JSON.stringify({
-          i,
-          inCell,
-          itemWidth: item.width ?? null,
-          widthAuto,
-          isScaling: el.isScaling ?? null,
-          imgScaleRatio: el.imgScaleRatio ?? null,
-          w: el.width ?? null,
-          h: el.height ?? null,
-          padding: el.padding ?? null
-        })
-      )
       return el
     })
     command.executeSetControlValue({ id, value: elements })
-    // [调试] 落库后读回控件值，验证 isScaling/imgScaleRatio/padding 是否被存储层保留
-    const backValue = command.getControlValue({ id })
-    const backElementList = backValue?.[0]?.elementList ?? []
-    const backImages = backElementList.filter(
-      e => e.type === ElementType.IMAGE
-    )
-    console.log(
-      '[img-debug] after-set',
-      JSON.stringify({
-        id,
-        elementsLen: elements.length,
-        backLen: backElementList.length,
-        backImages: backImages.length,
-        isScaling: backImages.map(e => !!e.isScaling),
-        ratio: backImages.map(e => e.imgScaleRatio ?? null),
-        padding: backImages.map(e => e.padding ?? null)
-      })
-    )
     // 需求 4/12：标记图片控件并写入拖拽配置（draggable 为控件级）
     command.executeSetControlProperties({
       id,

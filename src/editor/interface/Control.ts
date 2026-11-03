@@ -8,10 +8,22 @@ import { EditorZone } from '../dataset/enum/Editor'
 import { MoveDirection } from '../dataset/enum/Observer'
 import { RowFlex } from '../dataset/enum/Row'
 import { IDrawOption } from './Draw'
-import { IElement } from './Element'
+import { IElement, IImageCaption } from './Element'
 import { IPositionContext } from './Position'
 import { IRange } from './Range'
 import { IRow, IRowElement } from './Row'
+
+/** 需求：按 count 的图片尺寸/内边距预设，setControlValueByPlaceholder 时按 count 匹配应用 */
+export interface IImageCountConfig {
+  /** 一行图片数量（与 set 时的 count 对应） */
+  count: number
+  /** 图片内边距（同 IReplaceValueDetail.padding：二元组或四元组） */
+  padding?: [number, number] | [number, number, number, number]
+  /** 指定宽度（缺省由单元格/原图自适应） */
+  width?: number
+  /** 指定高度（缺省由宽高比自适应） */
+  height?: number
+}
 
 export interface IValueSet {
   value: string
@@ -108,6 +120,10 @@ export interface IControlBasic {
   imageResizable?: boolean
   /** 需求 11：表单模式下控件是否可编辑（缺省可编辑，false 不可编辑） */
   editable?: boolean
+  /** 需求：按 count 的图片尺寸/内边距预设（可视化配置，绑定到控件） */
+  imageCountConfigs?: IImageCountConfig[]
+  /** 需求：图片题注默认样式（value 以外的可视化配置），set 未指定时回退 */
+  imageCaptionStyle?: Partial<IImageCaption>
 }
 
 export interface IControlStyle {

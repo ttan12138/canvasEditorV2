@@ -53,21 +53,13 @@ function getImageOrderByIndex(
  * 控件配置对象直接取自渲染 elementList 中图片元素的 element.control（同一对象引用，
  * 重新格式化不会丢失；注意 getValueById 对图片控件不返回结果，不能用来读取）。
  */
-function isImageDraggable(element: IElement, draw: Draw): boolean {
+function isImageDraggable(element: IElement): boolean {
   const controlId = element.controlId
   if (!controlId) return false
   // 注意：getValueById 对图片控件返回空，须直接读元素上的 control 对象
   const control = element.control
   // 需求 11：控件不可编辑时禁用拖拽
   if (control?.editable === false) return false
-  console.log(
-    '[isImageDraggable] controlId=%s editable=%s imageDraggable=%s draggable=%s mode=%s',
-    controlId,
-    control?.editable,
-    control?.imageDraggable,
-    element.draggable,
-    draw.getMode()
-  )
   if (control?.imageDraggable !== undefined) return control.imageDraggable
   if (element.draggable !== undefined) return element.draggable
   return false
@@ -83,13 +75,6 @@ function isImageSwappable(element: IElement): boolean {
   const control = element.control
   // 需求 11：控件不可编辑时禁用交换
   if (control?.editable === false) return false
-  console.log(
-    '[isImageSwappable] controlId=%s editable=%s imageSwappable=%s swappable=%s',
-    controlId,
-    control?.editable,
-    control?.imageSwappable,
-    element.swappable
-  )
   if (control?.imageSwappable !== undefined) return control.imageSwappable
   if (element.swappable !== undefined) return element.swappable
   return false
@@ -120,7 +105,7 @@ export function setupControlImageSortDrag(
   const draw = host.getDraw()
   const mode = draw.getMode()
   if (mode !== EditorMode.READONLY && mode !== EditorMode.FORM) return
-  const canReorder = isImageDraggable(element, draw)
+  const canReorder = isImageDraggable(element)
   const canSwap = isImageSwappable(element)
   // 两种能力都没开启则不进入拖拽
   if (!canReorder && !canSwap) return

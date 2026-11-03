@@ -11,7 +11,8 @@ export const INTERNAL_CONTEXT_MENU_KEY = {
     PRINT: 'globalPrint'
   },
   CONTROL: {
-    DELETE: 'controlDelete'
+    DELETE: 'controlDelete',
+    EDIT: 'controlEdit'
   },
   HYPERLINK: {
     DELETE: 'hyperlinkDelete',

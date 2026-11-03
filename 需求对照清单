@@ -54,7 +54,33 @@ new Dialog({
 4. 请实现一个根据placeholder查找控件，替换对应控件value的函数，
 参数：{
   name: 【placeholder】,
-  values: [],// 数组 每一项{name: 【placeholder】, value: value1,valueType?: string, width?: number, height?: number, canDelete?: boolean, canEdit?: boolean,padding:[number, number]}
+  values: [],// 数组 每一项{
+    name: 【placeholder】, value: value1,valueType?: string, width?: number, height?: number, canDelete?: boolean, canEdit?: boolean,
+    padding:[number, number],
+    text:{
+      value: string,
+      color: string,
+      fontSize: number,
+      fontFamily: string,
+      lineHeight: number,
+      textAlign: string,
+      backgroundColor: string,
+      border: string,
+      borderRadius: number,
+      borderColor: string,
+      borderWidth: number,
+      borderStyle: string,
+      margin: number,
+      padding: number,
+      textDecoration: string,
+      textShadow: string,
+      fontWeight: string,
+      fontStyle: string,
+      opacity: number,
+      boxShadow: string,
+      transform: string,
+    }
+  }
   value: "", // 字符串
   // 取值逻辑
   // 如果是valueType = "VALUE",或者valueType = undefined时， 有value，则取value,有values，则取values中所有valueType = "VALUE"的项目的value拼接

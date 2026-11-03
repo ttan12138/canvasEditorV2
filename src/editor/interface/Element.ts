@@ -173,18 +173,44 @@ export interface IImageCrop {
 }
 
 export interface IImageCaption {
+  // 题注文本（取值）
   value: string
-  color?: string
-  font?: string
-  size?: number
-  top?: number
+  // ===== 样式 =====
+  color?: string // 字体颜色
+  highlight?: string // 文字高亮背景色
+  font?: string // 兼容旧字段：字体
+  fontFamily?: string // 字体
+  size?: number // 兼容旧字段：字号
+  fontSize?: number // 字号
+  lineHeight?: number // 行高倍数（默认 1.4）
+  textAlign?: CanvasTextAlign // 对齐方式 left/center/right/justify
+  backgroundColor?: string // 题注盒背景色
+  border?: string // 兼容简写（优先使用下方细项）
+  borderRadius?: number // 圆角
+  borderColor?: string
+  borderWidth?: number
+  borderStyle?: string
+  marginTop?: number // 上外边距：题注盒与上方图片的间隙
+  marginBottom?: number // 下外边距：题注盒与下方内容的间隙
+  paddingLeft?: number // 左内边距：题注文字距盒左边
+  paddingRight?: number // 右内边距：题注文字距盒右边
+  /** 兼容旧字段：未单独配置时的统一回退值 */
+  marginY?: number
+  paddingX?: number
+  textDecoration?: string // none | underline | line-through | underline line-through
+  textShadow?: string // CSS text-shadow，如 "1px 1px 2px #000"
+  fontWeight?: string | number // normal | bold | 400...
+  fontStyle?: string // normal | italic | oblique
+  opacity?: number // 0~1
+  boxShadow?: string
+  transform?: string // 如 "rotate(90deg)" / "scale(1.2)" / "translate(4px,4px)"
+  maxLines?: number // 最大显示行数，超出截断显示省略号（0/缺省不限制）
 }
 
 export interface IImgCaptionOption {
   color?: string
   font?: string
   size?: number
-  top?: number
 }
 
 export interface IListOption {

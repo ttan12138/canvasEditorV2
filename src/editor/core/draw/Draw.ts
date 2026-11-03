@@ -127,8 +127,10 @@ import {
 } from '../../utils/element'
 import {
   countImagesBeforeTarget,
+  getCaptionSpacing,
   getImagePadding,
   substituteImageNo,
+  truncateCaptionLines,
   wrapCaptionLines
 } from '../../utils/caption'
 import { shrinkColgroupToWidth } from '../../utils/table'
@@ -1525,6 +1527,7 @@ export class Draw {
     this._updatePageSizes()
     const cursorPosition = this.position.getCursorPosition()
     this.render({
+      isLazy: false,
       isSubmitHistory: false,
       isSetCursor: !!cursorPosition,
       curIndex: cursorPosition?.index
@@ -2161,57 +2164,55 @@ export class Draw {
               metrics.boundingBoxDescent = elementHeight + padTB
             }
           }
-          // [调试-需求5.3/5.6] 图片布局尺寸诊断：对比单图宽度与行可用宽度，
-          // 定位 scale 变化导致“一行变 N 张”的根因（可用宽度/图片宽度是否 scale 相关）。
-          console.log(
-            '[img-debug] layout',
-            JSON.stringify({
-              scale,
-              rowIndex: rowList.length - 1,
-              elIndex: i,
-              elCount: elementList.length,
-              isFromTable: !!payload.isFromTable,
-              rowMaxWidth: Math.round(rowMaxWidth),
-              offsetX: Math.round(offsetX),
-              curRowWidth: Math.round(curRow.width),
-              availableWidth: Math.round(availableWidth),
-              isScaling: !!element.isScaling,
-              imgScaleRatio: element.imgScaleRatio ?? null,
-              elWidthDoc: element.width,
-              elHeightDoc: element.height,
-              imgLiveWidth: element.imgLiveWidth ?? null,
-              metricsWidth: Math.round(metrics.width),
-              metricsHeight: Math.round(metrics.height),
-              padL: Math.round(padL),
-              padR: Math.round(padR),
-              padT: Math.round(padT),
-              padB: Math.round(padB)
-            })
-          )
-          // 增加题注高度（支持多行换行）
+          // 增加题注高度（支持多行换行）。必须与 ImageParticle._renderCaption
+          // 完全同源：同一字体串/字号回退链/换行宽（paddingX）/行高倍数
+          // （lineHeight）/最大行数截断（maxLines），否则两侧行数不一致会重叠或留空。
           if (element.imgCaption?.value) {
-            const fontSize = element.imgCaption.size || imgCaption.size
-            const fontFamily = element.imgCaption.font || imgCaption.font
-            const captionTop = element.imgCaption.top ?? imgCaption.top
-            ctx.font = `${fontSize * scale}px ${fontFamily}`
-            let captionText = element.imgCaption.value
+            const caption = element.imgCaption
+            const fontSize = caption.fontSize ?? caption.size ?? imgCaption.size
+            const fontFamily =
+              caption.fontFamily || caption.font || imgCaption.font
+            const fontWeight = `${caption.fontWeight ?? 'normal'}`
+            const fontStyle = caption.fontStyle || 'normal'
+            const lineHeight =
+              fontSize * scale * (caption.lineHeight ?? 1.4)
+            // 四向间距与绘制侧共用 getCaptionSpacing（兼容旧 marginY/paddingX 单值）
+            const capSpacing = getCaptionSpacing(caption)
+            const capMarginTop = capSpacing.marginTop * scale
+            const capMarginBottom = capSpacing.marginBottom * scale
+            const capPaddingLeft = capSpacing.paddingLeft * scale
+            const capPaddingRight = capSpacing.paddingRight * scale
+            const capMaxLines = caption.maxLines ?? 0
+            ctx.font = `${fontStyle} ${fontWeight} ${fontSize * scale}px ${fontFamily}`
+            let captionText = caption.value
             if (captionText.includes('{imageNo}')) {
               const elementList = this.getOriginalMainElementList()
               const imageNo =
                 Math.max(countImagesBeforeTarget(elementList, element), 0) + 1
               captionText = substituteImageNo(captionText, imageNo)
             }
-            const { padL: capPadL, padR: capPadR, padB: capPadB } =
-              getImagePadding(element)
-            const capWidth =
+            const { padL: capPadL, padR: capPadR } = getImagePadding(element)
+            // 题注盒宽 = 图像内容宽 + 图片左右内边距（与绘制侧 boxWidth 一致）
+            const capBoxWidth =
               (element.imgLiveWidth ?? element.width!) * scale +
               capPadL * scale +
               capPadR * scale
-            const lines = wrapCaptionLines(ctx, captionText, capWidth)
-            const lineHeight = fontSize * scale * 1.4
-            const captionHeight = captionTop * scale + lines.length * lineHeight
-            // 预留下内边距 + 题注高度，避免与下一行/分页重叠
-            metrics.boundingBoxAscent += captionHeight + capPadB * scale
+            const capInnerWidth = Math.max(
+              capBoxWidth - capPaddingLeft - capPaddingRight,
+              1
+            )
+            const wrapped = wrapCaptionLines(ctx, captionText, capInnerWidth)
+            const lines = truncateCaptionLines(
+              ctx,
+              wrapped,
+              capMaxLines,
+              capInnerWidth
+            )
+            const textBlockH = lines.length * lineHeight
+            // 预留：上 margin + 文本块 + 下 margin（与绘制盒位置精确对应，
+            // 图片下内边距 padB 已计入图片盒 descent，不重复预留）
+            metrics.boundingBoxAscent +=
+              capMarginTop + textBlockH + capMarginBottom
           }
         }
       } else if (element.type === ElementType.TABLE) {
@@ -2855,7 +2856,9 @@ export class Draw {
           }
         }
         // 需求：整行内容仅由图片组成时，用图片高度直接作为行高、去除上下行距(rowMargin)，
-        // 避免图片上下出现多余空白。作用于「整行内容都是图片(无文本)且均不带题注」的场景
+        // 避免图片上下出现多余空白。作用于「整行内容都是图片(无文本)」的场景，
+        // 含带题注的图片行：行高 = 最高图片盒 + 最大题注预留（margin/行高/行数），
+        // 即图片上下 padding=0 且题注上下 margin=0 时行间无额外间隙
         // （控件内图片默认 imgDisplay 为 undefined，按非内联分支计算，需区分处理）。
         // 与分页无关：仅缩小该行高度，分页依据的同样是该 height 变量，逻辑不变。
         {
@@ -2876,13 +2879,13 @@ export class Draw {
               el =>
                 el.type === ElementType.IMAGE &&
                 el.imgDisplay !== ImageDisplay.SURROUND &&
-                el.metrics.boundingBoxAscent === 0 &&
                 !el.hide &&
                 !this.traceParticle.isTraceHidden(el)
             )
           if (allImage) {
             // 控件内图片默认 imgDisplay 为 undefined => 非内联(浮动)分支：
-            //   offsetY = curRow.ascent - metrics.height，需令 ascent = 图片高度使 offsetY=0；
+            //   offsetY = curRow.ascent - metrics.height，需令 ascent = 最高图片盒高
+            //   使最高图 offsetY=0（题注自图片盒底起绘，随行高压缩自然贴合）；
             // 内联图片：offsetY = curRow.ascent，令 ascent = 0 即可贴顶。
             const isInline = contentElements.every(
               el => el.imgDisplay === ImageDisplay.INLINE
@@ -2890,10 +2893,15 @@ export class Draw {
             const imgH = Math.max(
               ...contentElements.map(el => el.metrics.height)
             )
-            curRow.height = imgH
+            const totalH = Math.max(
+              ...contentElements.map(
+                el => el.metrics.height + el.metrics.boundingBoxAscent
+              )
+            )
+            curRow.height = totalH
             curRow.ascent = isInline ? 0 : imgH
             curRow.isImageOnlyRow = true
-            height = imgH
+            height = totalH
           }
         }
         // 换行原因：宽度不足
@@ -3355,12 +3363,13 @@ export class Draw {
           // 当前元素位置信息记录
           const rowMargin = this.getElementRowMargin(element)
           if (curRow.isImageOnlyRow) {
-            // 纯图行：边框紧贴图片（去除上下行距内缩）
+            // 纯图行：边框紧贴图片盒本身（含题注行时行高含题注预留，
+            // 边框不应罩到题注区域）
             this.control.recordBorderInfo(
               x,
               y,
               element.metrics.width,
-              curRow.height
+              element.metrics.height
             )
           } else {
             this.control.recordBorderInfo(

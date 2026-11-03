@@ -288,8 +288,7 @@ const optionGroups: { group: string; fields: OptField[] }[] = [
     group: '图片标题', fields: [
       { path: 'imgCaption.color', label: '颜色', type: 'color' },
       { path: 'imgCaption.font', label: '字体', type: 'text' },
-      { path: 'imgCaption.size', label: '字号', type: 'number', min: 1 },
-      { path: 'imgCaption.top', label: '上偏移', type: 'number', min: 0 }
+      { path: 'imgCaption.size', label: '字号', type: 'number', min: 1 }
     ]
   },
   {
