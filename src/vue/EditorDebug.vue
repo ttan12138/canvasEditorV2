@@ -477,10 +477,10 @@ const setBatchEditable = (editable: boolean) => {
   if (!command) return
   const count = setControlsEditableByPlaceholders(
     command,
-    ['患者姓名', '患者性别', '患者年龄'],
+    ['_BEHAVIOR_', '_DIAGRESULT_'],
     editable
   )
-  resultText.value = `已设置 ${count} 个占位符（患者姓名/性别/年龄）控件为${editable ? '可编辑' : '不可编辑'}（切到表单模式验证）`
+  resultText.value = `已设置 ${count} 个占位符（'_BEHAVIOR_', '_DIAGRESULT_'）控件为${editable ? '可编辑' : '不可编辑'}（切到表单模式验证）`
 }
 
 // ============ 需求 12.1：统一设置所有图片控件删除/拖拽/缩放能力 ============

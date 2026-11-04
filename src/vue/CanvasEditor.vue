@@ -22,6 +22,7 @@ import {
   setControlEditableByPlaceholder,
   setAllControlEditable,
   setControlsEditableByPlaceholders,
+  setAllImageControlsEditable,
   setImageControlConfigForAll,
   setImageControlConfigByPlaceholder,
   type IReplaceControlPayload,
@@ -191,6 +192,9 @@ defineExpose({
           editable
         )
       : 0,
+  /** 需求11（补充）：一键设置全部图片控件可编辑/不可编辑，返回命中数量 */
+  setAllImageControlsEditable: (editable: boolean) =>
+    editor.value ? setAllImageControlsEditable(editor.value.command, editable) : 0,
   /** 需求12.1：统一设置所有图片控件的删除/拖拽能力，返回命中图片控件数量 */
   setImageControlConfigForAll: (config: IImageControlConfig) =>
     editor.value

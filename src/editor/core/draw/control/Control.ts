@@ -1298,7 +1298,10 @@ export class Control {
               type === ControlType.NUMBER) &&
             nextElement.controlComponent === ControlComponent.VALUE
           ) {
-            textControlValue += nextElement.value
+            // 控件值内的换行在 formatElementList 时已被替换为零宽 ZERO，
+            // 取值时还原为 \n，避免多行文本控件的换行丢失
+            textControlValue +=
+              nextElement.value === ZERO ? '\n' : nextElement.value
             textControlElementList.push(
               omitObject(nextElement, CONTROL_CONTEXT_ATTR)
             )

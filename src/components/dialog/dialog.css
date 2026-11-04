@@ -4,7 +4,7 @@
   top: 0;
   width: 100%;
   height: 100%;
-  opacity: .5;
+  opacity: 0.5;
   background: #000000;
   z-index: 99;
 }
@@ -71,7 +71,7 @@
   height: 30px;
   border-radius: 2px;
   border: 1px solid #d3d3d3;
-  min-height: 30px;
+  min-height: 28px;
   padding: 5px;
   box-sizing: border-box;
   outline: none;
@@ -84,6 +84,14 @@
    覆盖 dialog-option__item 的 flex 横排，防止固定宽度弹窗下内容溢出 */
 .dialog-option__item--block {
   display: block;
+}
+.dialog-option__item--count-config {
+  border: 1px dashed #d3d3d3;
+}
+.dialog-option__item--count-config .dialog-option__label {
+  position: absolute;
+  width: 10px;
+  padding-top: 10px;
 }
 
 /* 弹窗主字段输入弹性收缩（配合容器定宽）：仅直接子项，不影响分组内部 */
@@ -101,7 +109,7 @@
 }
 
 .dialog-option__item--require::before {
-  content: "*";
+  content: '*';
   color: #f56c6c;
   margin-right: 4px;
   position: absolute;
@@ -127,7 +135,7 @@
 }
 
 .dialog-menu button:hover {
-  background: rgba(25, 55, 88, .04);
+  background: rgba(25, 55, 88, 0.04);
 }
 
 .dialog-menu__cancel {
@@ -173,11 +181,11 @@
   height: 22px;
   border-radius: 11px;
   background: #c0c4cc;
-  transition: background .2s;
+  transition: background 0.2s;
 }
 
 .dialog-switch__track::after {
-  content: "";
+  content: '';
   position: absolute;
   left: 2px;
   top: 2px;
@@ -185,7 +193,7 @@
   height: 18px;
   border-radius: 50%;
   background: #ffffff;
-  transition: transform .2s;
+  transition: transform 0.2s;
 }
 
 .dialog-switch__input:checked + .dialog-switch__track {
@@ -227,7 +235,7 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   column-gap: 16px;
-  row-gap: 8px;
+  row-gap: 14px;
   margin-bottom: 10px;
 }
 
@@ -254,7 +262,7 @@
   flex: 0 0 30%;
   max-width: 30%;
   grid-template-columns: 1fr;
-  row-gap: 10px;
+  row-gap: 14px;
   margin-bottom: 0;
 }
 
@@ -283,7 +291,8 @@
 }
 
 .cc-row__label {
-  width: 56px;
+  margin-left: 20px;
+  width: 8px;
   flex-shrink: 0;
   font-size: 13px;
   color: #3d4757;
@@ -294,10 +303,10 @@
   flex: 1;
   min-width: 0;
   width: auto !important;
-  height: 28px;
+  height: 20px;
   border: 1px solid #d3d3d3;
   border-radius: 2px;
-  padding: 4px;
+  padding: 1px;
   box-sizing: border-box;
   outline: none;
 }

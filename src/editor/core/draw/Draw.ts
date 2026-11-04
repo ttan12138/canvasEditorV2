@@ -1,5 +1,5 @@
 import { version } from '../../../../package.json'
-import { ZERO } from '../../dataset/constant/Common'
+import { WRAP, ZERO } from '../../dataset/constant/Common'
 import { resolveCellShow } from './particle/table/linkage'
 import { buildChildTableElement } from './particle/table/childTable'
 
@@ -1026,7 +1026,12 @@ export class Draw {
     } else {
       const elementList = this.getElementList()
       const isCollapsed = startIndex === endIndex
-      const start = startIndex + 1
+      let start = startIndex + 1
+      // 光标位于换行符上（段尾 / 空段落）时，将内容插入到该换行符之前（行内），
+      // 避免插入到换行之后形成独立空段落，表现为控件 / 文本前后多出空行
+      if (isCollapsed && elementList[startIndex]?.value === WRAP) {
+        start = startIndex
+      }
       if (!isCollapsed) {
         this.deleteElementList(elementList, start, endIndex - startIndex)
       }
@@ -1497,33 +1502,36 @@ export class Draw {
 
   public setPageScale(payload: number, anchorY?: number) {
     const oldScale = this.options.scale
-    if (payload === oldScale) {
-      if (this.listener.pageScaleChange) {
-        this.listener.pageScaleChange(payload)
-      }
-      if (this.eventBus.isSubscribe('pageScaleChange')) {
-        this.eventBus.emit('pageScaleChange', payload)
-      }
-      return
+    const isScaleChanged = payload !== oldScale
+    // 仅当缩放比例实际变化时，记录缩放前的滚动状态（用于以锚点为中心还原视图位置）
+    let scrollContainer: HTMLElement = document.documentElement
+    let isDocumentScroll = true
+    let viewTop = 0
+    let viewHeight = 0
+    let anchorRatio = 0
+    let anchorOffset = 0
+    if (isScaleChanged) {
+      scrollContainer = findScrollContainer(this.container)
+      isDocumentScroll = scrollContainer === document.documentElement
+      viewTop = isDocumentScroll
+        ? window.scrollY
+        : (scrollContainer as HTMLElement).scrollTop
+      viewHeight = isDocumentScroll
+        ? Math.max(document.documentElement.clientHeight, window.innerHeight)
+        : (scrollContainer as HTMLElement).clientHeight
+      const scrollHeightBefore = isDocumentScroll
+        ? document.documentElement.scrollHeight
+        : (scrollContainer as HTMLElement).scrollHeight
+      // 缩放中心：优先用调用方传入的锚点（通常为鼠标指针位置），否则取视图中心
+      const anchor = anchorY ?? viewTop + viewHeight / 2
+      anchorRatio = scrollHeightBefore > 0 ? anchor / scrollHeightBefore : 0
+      // 锚点在视图内的像素偏移（缩放后需保持不变）
+      anchorOffset = anchor - viewTop
     }
-    // 记录缩放前的滚动状态：缩放后以锚点为中心还原视图位置，避免视图跳到顶部
-    const scrollContainer = findScrollContainer(this.container)
-    const isDocumentScroll = scrollContainer === document.documentElement
-    const viewTop = isDocumentScroll
-      ? window.scrollY
-      : (scrollContainer as HTMLElement).scrollTop
-    const viewHeight = isDocumentScroll
-      ? Math.max(document.documentElement.clientHeight, window.innerHeight)
-      : (scrollContainer as HTMLElement).clientHeight
-    const scrollHeightBefore = isDocumentScroll
-      ? document.documentElement.scrollHeight
-      : (scrollContainer as HTMLElement).scrollHeight
-    // 缩放中心：优先用调用方传入的锚点（通常为鼠标指针位置），否则取视图中心
-    const anchor = anchorY ?? viewTop + viewHeight / 2
-    const anchorRatio =
-      scrollHeightBefore > 0 ? anchor / scrollHeightBefore : 0
 
     this.options.scale = payload
+    // 始终校正页面尺寸与重绘：即使比例未变（如外部注入 options 后调 setScale），
+    // 也可能存在排版与画布位图尺寸不一致，需 _updatePageSizes 校正
     this._updatePageSizes()
     const cursorPosition = this.position.getCursorPosition()
     this.render({
@@ -1533,17 +1541,20 @@ export class Draw {
       curIndex: cursorPosition?.index
     })
 
-    // 缩放后以锚点为中心还原视图位置（内容整体按 scale 比例缩放，故锚点绝对位置同比缩放）
-    const scrollHeightAfter = isDocumentScroll
-      ? document.documentElement.scrollHeight
-      : (scrollContainer as HTMLElement).scrollHeight
-    let newScrollTop = anchorRatio * scrollHeightAfter - (anchor - viewTop)
-    const maxScrollTop = Math.max(0, scrollHeightAfter - viewHeight)
-    newScrollTop = Math.min(Math.max(0, newScrollTop), maxScrollTop)
-    if (isDocumentScroll) {
-      window.scrollTo({ top: newScrollTop })
-    } else {
-      ;(scrollContainer as HTMLElement).scrollTo({ top: newScrollTop })
+    // 缩放后（比例变化时）以锚点为中心还原视图位置：
+    // 内容整体按 scale 比例缩放，锚点绝对位置同比缩放，使锚点内容停留在视图中原位置
+    if (isScaleChanged) {
+      const scrollHeightAfter = isDocumentScroll
+        ? document.documentElement.scrollHeight
+        : (scrollContainer as HTMLElement).scrollHeight
+      let newScrollTop = anchorRatio * scrollHeightAfter - anchorOffset
+      const maxScrollTop = Math.max(0, scrollHeightAfter - viewHeight)
+      newScrollTop = Math.min(Math.max(0, newScrollTop), maxScrollTop)
+      if (isDocumentScroll) {
+        window.scrollTo({ top: newScrollTop })
+      } else {
+        ;(scrollContainer as HTMLElement).scrollTo({ top: newScrollTop })
+      }
     }
 
     if (this.listener.pageScaleChange) {
@@ -1731,7 +1742,9 @@ export class Draw {
   }
 
   public setValue(payload: Partial<IEditorData>, options?: ISetValueOption) {
-    const { header, main, footer } = deepClone(payload)
+    // 防御：payload 可能为 undefined（如上层数据绑定某一刻未就绪），
+    // 避免 deepClone(undefined) 后解构 header 抛 “Cannot destructure ... is undefined”
+    const { header, main, footer } = payload ? deepClone(payload) : {}
     if (!header && !main && !footer) return
     const { isSetCursor = false } = options || {}
     const pageComponentData = [header, main, footer]
@@ -2174,8 +2187,7 @@ export class Draw {
               caption.fontFamily || caption.font || imgCaption.font
             const fontWeight = `${caption.fontWeight ?? 'normal'}`
             const fontStyle = caption.fontStyle || 'normal'
-            const lineHeight =
-              fontSize * scale * (caption.lineHeight ?? 1.4)
+            const lineHeight = fontSize * scale * (caption.lineHeight ?? 1.4)
             // 四向间距与绘制侧共用 getCaptionSpacing（兼容旧 marginY/paddingX 单值）
             const capSpacing = getCaptionSpacing(caption)
             const capMarginTop = capSpacing.marginTop * scale
@@ -2702,6 +2714,10 @@ export class Draw {
           preElement?.controlComponent === ControlComponent.VALUE) ||
         (i !== 0 &&
           element.value === ZERO &&
+          // 控件前后缀以零宽 ZERO 占位（行内锚点），不应当作段落结束符强制换行，
+          // 否则会把控件顶到独立行、上下各断出空行
+          element.controlComponent !== ControlComponent.PREFIX &&
+          element.controlComponent !== ControlComponent.POSTFIX &&
           !(element.area?.hide && !this.isAreaHideDisabled()))
       // 是否宽度不足导致换行
       // 需求 5.6：浮点容差。图片槽宽×张数与容器宽在数学上精确相等

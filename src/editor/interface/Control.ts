@@ -124,6 +124,12 @@ export interface IControlBasic {
   imageCountConfigs?: IImageCountConfig[]
   /** 需求：图片题注默认样式（value 以外的可视化配置），set 未指定时回退 */
   imageCaptionStyle?: Partial<IImageCaption>
+  /** 需求：默认图片配置（宽/高/四向内边距），set 图片未传入对应字段时回退 */
+  imageDefaultConfig?: {
+    width?: number
+    height?: number
+    padding?: [number, number, number, number]
+  }
 }
 
 export interface IControlStyle {

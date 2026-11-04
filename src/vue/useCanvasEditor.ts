@@ -179,7 +179,9 @@ export function useCanvasEditor(option: UseCanvasEditorOption) {
       updateOptions({
         ...value,
         background: { ...value.background, color: current.background.color },
-        scale: current.scale
+        // 仅当外部未显式提供 scale 时才保留当前缩放（如护眼等局部更新）；
+        // 显式提供（含模板自带缩放）时采用外部值，避免切模板时缩放被丢弃
+        scale: value.scale ?? current.scale
       })
       // 需求：切换编辑器配置（如切模板/换文档）后重置撤销/重做堆栈
       executeClearHistory()

@@ -118,7 +118,7 @@ export function buildControlDialogData(existing?: IControl): IDialogData[] {
             },
             {
               type: 'countConfig',
-              label: 'count 图片预设',
+              label: '预设图片配置',
               name: 'imageCountConfigs',
               maxCount: 10,
               defaultCount: 4,
@@ -127,8 +127,14 @@ export function buildControlDialogData(existing?: IControl): IDialogData[] {
           ]
         },
         {
+          type: 'defaultImageConfig',
+          label: '默认图片配置',
+          name: 'imageDefaultConfig',
+          initial: existing?.imageDefaultConfig ?? {}
+        },
+        {
           type: 'captionStyle',
-          label: '图片题注默认样式',
+          label: '图片描述默认样式',
           name: 'imageCaptionStyle',
           initial: existing?.imageCaptionStyle ?? {}
         }
@@ -211,6 +217,32 @@ export function openControlConfigDialog(
         countConfigs.push(entry)
       }
 
+      // 默认图片配置（宽/高/四向内边距）：明细未传入时兜底
+      const defaultImageConfig: NonNullable<IControl['imageDefaultConfig']> = {}
+      const dicWidth = getVal('dic_width')
+      const dicHeight = getVal('dic_height')
+      const dicPad = {
+        t: getVal('dic_padding_t'),
+        r: getVal('dic_padding_r'),
+        b: getVal('dic_padding_b'),
+        l: getVal('dic_padding_l')
+      }
+      const hasDicPad = Object.values(dicPad).some(v => v != null && v !== '')
+      if (dicWidth != null && dicWidth !== '') {
+        defaultImageConfig.width = Number(dicWidth)
+      }
+      if (dicHeight != null && dicHeight !== '') {
+        defaultImageConfig.height = Number(dicHeight)
+      }
+      if (hasDicPad) {
+        defaultImageConfig.padding = [
+          toNumOrZero(dicPad.t),
+          toNumOrZero(dicPad.r),
+          toNumOrZero(dicPad.b),
+          toNumOrZero(dicPad.l)
+        ]
+      }
+
       // 题注默认样式（value 以外的可视化配置）
       const captionStyle: Record<string, unknown> = {}
       for (const f of CAPTION_FIELDS) {
@@ -236,6 +268,9 @@ export function openControlConfigDialog(
           imageSwappable
         }
         if (countConfigs.length) properties.imageCountConfigs = countConfigs
+        if (Object.keys(defaultImageConfig).length) {
+          properties.imageDefaultConfig = defaultImageConfig
+        }
         if (Object.keys(captionStyle).length) {
           properties.imageCaptionStyle = captionStyle as Partial<IImageCaption>
         }
@@ -254,6 +289,9 @@ export function openControlConfigDialog(
           imageSwappable
         }
         if (countConfigs.length) control.imageCountConfigs = countConfigs
+        if (Object.keys(defaultImageConfig).length) {
+          control.imageDefaultConfig = defaultImageConfig
+        }
         if (Object.keys(captionStyle).length) {
           control.imageCaptionStyle = captionStyle as Partial<IImageCaption>
         }

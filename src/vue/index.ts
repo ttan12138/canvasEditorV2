@@ -33,6 +33,7 @@ export {
   setControlEditableByPlaceholder,
   setAllControlEditable,
   setControlsEditableByPlaceholders,
+  setAllImageControlsEditable,
   setImageControlConfigForAll,
   setImageControlConfigByPlaceholder
 } from './control'

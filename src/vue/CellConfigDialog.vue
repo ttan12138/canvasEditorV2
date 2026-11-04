@@ -271,11 +271,28 @@ const chooseAlign = (axis: 'v' | 'h', val: VerticalAlign | RowFlex) => {
 
 // ============ 预览表拖拽（细条手柄，悬停显示，不占单元格空间） ============
 const previewTableRef = ref<HTMLTableElement | null>(null)
-let colDrag: { col: (typeof dialog.header)[number]; startX: number; startW: number } | null = null
+// 需求 8.6：拖拽的是「两列之间的分隔线」，应只影响相邻两列、且两者宽度和保持不变
+let colDrag: {
+  leftCol: (typeof dialog.header)[number]
+  rightCol: (typeof dialog.header)[number] | null
+  startX: number
+  startLeft: number
+  startRight: number
+} | null = null
 const onColResizeStart = (e: PointerEvent, col: (typeof dialog.header)[number]) => {
   e.preventDefault()
   e.stopPropagation()
-  colDrag = { col, startX: e.clientX, startW: Number(col.width) || 1 }
+  const idx = dialog.header.indexOf(col)
+  // 分隔线属于左侧列，仅当其右侧仍有相邻列时才做「等宽互补」调整
+  const rightCol =
+    idx >= 0 && idx < dialog.header.length - 1 ? dialog.header[idx + 1] : null
+  colDrag = {
+    leftCol: col,
+    rightCol,
+    startX: e.clientX,
+    startLeft: Number(col.width) || 1,
+    startRight: rightCol ? Number(rightCol.width) || 1 : 0
+  }
   window.addEventListener('pointermove', onColResizeMove)
   window.addEventListener('pointerup', onColResizeEnd)
 }
@@ -283,7 +300,28 @@ const onColResizeMove = (e: PointerEvent) => {
   if (!colDrag || !previewTableRef.value) return
   const w = previewTableRef.value.clientWidth
   const dxPct = ((e.clientX - colDrag.startX) / w) * 100
-  colDrag.col.width = Math.max(5, Math.round((colDrag.startW + dxPct) * 10) / 10)
+  // 无右邻列（防御：理论上末列右线已禁用）——仅调整自身
+  if (!colDrag.rightCol) {
+    colDrag.leftCol.width = Math.max(
+      5,
+      Math.round((colDrag.startLeft + dxPct) * 10) / 10
+    )
+    return
+  }
+  const MIN = 5
+  let newLeft = colDrag.startLeft + dxPct
+  let newRight = colDrag.startRight - dxPct
+  // 夹紧到最小宽度，同时保持两侧宽度和不变（任一侧触底时由另一侧补偿）
+  if (newLeft < MIN) {
+    newRight -= MIN - newLeft
+    newLeft = MIN
+  }
+  if (newRight < MIN) {
+    newLeft -= MIN - newRight
+    newRight = MIN
+  }
+  colDrag.leftCol.width = Math.round(newLeft * 10) / 10
+  colDrag.rightCol.width = Math.round(newRight * 10) / 10
 }
 const onColResizeEnd = () => {
   colDrag = null
@@ -466,20 +504,20 @@ onUnmounted(() => {
       </div>
 
       <div class="cc-row">
-        <label>名称(name)</label>
-        <input v-model="dialog.name" placeholder="子表单元格名称，供 setChildTable 查找" />
+        <label>名称(key)</label>
+        <input v-model="dialog.name" placeholder="子表单元格名称，见caseStudy.xml" />
       </div>
 
       <div class="cc-row">
-        <label>开启联动</label>
+        <label>开启联动显示控制 </label>
         <input type="checkbox" v-model="dialog.enableLink" />
-        <button v-if="dialog.enableLink" type="button" class="cc-pick-btn" @click="startPicking">在表格上拾取联动子单元格</button>
+        <!-- <button v-if="dialog.enableLink" type="button" class="cc-pick-btn" @click="startPicking">在表格上拾取联动子单元格</button> -->
       </div>
 
       <div class="cc-row" v-if="dialog.enableLink">
         <label>联动子单元格</label>
         <div class="cc-children">
-          <label v-for="c in allCells.filter(x => x.tdId !== dialog.tdId)" :key="c.tdId" class="cc-child"
+          <label v-for="c in allCells.filter(x => x.tdId !== dialog.tdId && x.hasChild)" :key="c.tdId" class="cc-child"
             :class="{ 'is-cycle': wouldCycle(c.tdId) }" :title="wouldCycle(c.tdId) ? '选择该单元格将形成环路，已禁用' : ''">
             <input type="checkbox" :checked="isChildSelected(c.tdId)"
               :disabled="wouldCycle(c.tdId) && !isChildSelected(c.tdId)" @change="toggleChild(c.tdId)" />
@@ -488,14 +526,14 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <div class="cc-row">
+      <!-- <div class="cc-row">
         <label>是否显示</label>
         <input type="checkbox" v-model="dialog.show" />
         <span class="cc-hint">表单模式生效；编辑模式始终显示</span>
-      </div>
+      </div> -->
 
       <div class="cc-row">
-        <label>有子表</label>
+        <label>设置为子表单元格</label>
         <input type="checkbox" v-model="dialog.hasChild" />
       </div>
 
@@ -549,7 +587,8 @@ onUnmounted(() => {
                       @click.stop="openAlign($event, col, 'header', i)">
                       <span class="cc-cell__txt">{{ col.name || col.key }}</span>
                     </div>
-                    <div class="cc-resizer cc-resizer--col" @pointerdown.stop="onColResizeStart($event, col)"></div>
+                    <div v-if="i < dialog.header.length - 1" class="cc-resizer cc-resizer--col"
+                      @pointerdown.stop="onColResizeStart($event, col)"></div>
                     <div class="cc-resizer cc-resizer--row" @pointerdown.stop="onRowResizeStart($event, 'header')">
                     </div>
                     <button type="button" class="cc-del-col" @click.stop="removeHeaderCol(i)" title="删除列">×</button>
@@ -572,9 +611,14 @@ onUnmounted(() => {
             </table>
           </div>
         </div>
-        <div class="cc-hint">外侧框即父单元格（宽度=画布父单元格宽，内边距用 childTableTdPadding）；其内部子表的外缩与单元格内边距用全局
-          tdPadding，子表总宽与画布一致。表头显示标题、数据行显示
-          key；悬停列右侧竖条拖拽调列宽、悬停行右侧横条拖拽调行高（表头行高见上方「表头行高」）；悬停列右上角「×」删除该列；点击单元格弹出边框与对齐（及标题/key）配置。上方「＋加一列」新增列。</div>
+        <div class="cc-hint">
+          表头为静态文字；<br>
+          内容为数据字段，见"子表.xml"的fieldas；<br>
+          悬停列右侧竖条拖拽调列宽、悬停行右侧横条拖拽调行高；<br>
+          悬停列右上角「×」删除该列；<br>
+          点击单元格弹出边框与对齐配置。<br>
+          上方「＋加一列」新增列。<br>
+        </div>
       </div>
 
       <!-- 需求 8.6：单元格「设置」弹层——边框显隐 + 垂直/水平对齐（表头/内容分别） -->
@@ -616,7 +660,7 @@ onUnmounted(() => {
       </div>
 
       <div class="cc-actions">
-        <button type="button" @click="saveCellConfig">保存</button>
+        <button type="button" @click="saveCellConfig">确认</button>
         <button type="button" @click="dialog.open = false">取消</button>
       </div>
     </div>
@@ -796,7 +840,8 @@ onUnmounted(() => {
 }
 
 .cc-preview-wrap {
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .cc-preview-inner {
@@ -955,6 +1000,7 @@ onUnmounted(() => {
   background: #193758;
   color: #fff;
 }
+
 /* 防御宿主全局 reset 覆盖原生 checkbox */
 .cc-dialog input[type='checkbox'] {
   display: inline-block !important;

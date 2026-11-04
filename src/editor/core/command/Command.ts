@@ -167,6 +167,8 @@ export class Command {
   public getControlList: CommandAdapt['getControlList']
   public setAllControlsEditable: CommandAdapt['setAllControlsEditable']
   public setControlsEditableByPlaceholders: CommandAdapt['setControlsEditableByPlaceholders']
+  public setAllImageControlsEditable: CommandAdapt['setAllImageControlsEditable']
+  public getEventBus: CommandAdapt['getEventBus']
   public getControlsValue: CommandAdapt['getControlsValue']
   public replaceControlValue: CommandAdapt['replaceControlValue']
   public setChildTable: CommandAdapt['setChildTable']
@@ -689,6 +691,9 @@ export class Command {
     this.setAllControlsEditable = adapt.setAllControlsEditable.bind(adapt)
     this.setControlsEditableByPlaceholders =
       adapt.setControlsEditableByPlaceholders.bind(adapt)
+    this.setAllImageControlsEditable =
+      adapt.setAllImageControlsEditable.bind(adapt)
+    this.getEventBus = adapt.getEventBus.bind(adapt)
     this.getControlsValue = adapt.getControlsValue.bind(adapt)
     this.replaceControlValue = adapt.replaceControlValue.bind(adapt)
     this.setChildTable = adapt.setChildTable.bind(adapt)

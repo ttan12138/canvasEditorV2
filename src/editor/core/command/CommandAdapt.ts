@@ -31,6 +31,8 @@ import type {
   ISetCellConfigPayload,
   ITableCellInfo
 } from '../../interface/table/Td'
+import { EventBus } from '../event/eventbus/EventBus'
+import type { EventBusMap } from '../../interface/EventBus'
 import { ElementStyleKey } from '../../dataset/enum/ElementStyle'
 import { ListStyle, ListType } from '../../dataset/enum/List'
 import { MoveDirection } from '../../dataset/enum/Observer'
@@ -3061,6 +3063,13 @@ export class CommandAdapt {
   // 使只读锁定在 setData 重载后依然生效。最后一次调用决定最终值（last-call-wins）。
   private _desiredAllEditable: boolean | null = null
   private _allEditableStickyBound = false
+  // 白名单解锁的 sticky 状态：每次内容变化（如 setData 重载）后，
+  // 在“全部锁定”重设之后重新应用白名单解锁，避免白名单解锁被覆盖
+  private _desiredEditableWhitelist: string[] | null = null
+  private _desiredWhitelistEditable: boolean | null = null
+  // 图片控件的 sticky 可编辑状态：一键设置全部图片控件可编辑/不可编辑，
+  // 在“全部锁定”sticky 重设后仍保持，避免被覆盖
+  private _desiredImageEditable: boolean | null = null
 
   public setAllControlsEditable(editable: boolean): number {
     this._desiredAllEditable = editable
@@ -3103,6 +3112,52 @@ export class CommandAdapt {
     return count
   }
 
+  // 按“全部锁定值 + 白名单解锁”的最终状态一次性设置控件 editable。
+  // 仅在值变化时修改并 forceUpdate，避免 sticky 在每次 contentChange（含用户输入）时
+  // 反复翻转 editable 导致重渲染、光标丢失。
+  private _applyEditableState(): void {
+    const allEditable = this._desiredAllEditable
+    const whitelist = this._desiredEditableWhitelist
+    const wlEditable = this._desiredWhitelistEditable ?? true
+    const lists: IElement[][] = [
+      this.draw.getHeader().getElementList(),
+      this.draw.getOriginalMainElementList(),
+      this.draw.getFooter().getElementList()
+    ]
+    let changed = 0
+    const walk = (elementList: IElement[]) => {
+      for (const element of elementList) {
+        if (element.type === ElementType.TABLE && element.trList) {
+          for (const tr of element.trList) {
+            for (const td of tr.tdList) {
+              walk(td.value)
+            }
+          }
+        }
+        if (element.control) {
+          const ph = element.control.placeholder
+          const inWhitelist = !!(whitelist && ph && whitelist.includes(ph))
+          const isImage = element.control.imageControl === true
+          // 优先级：占位符白名单 > 图片控件显式设置 > 全部锁定值（null 表示不干预）
+          let target: boolean | null
+          if (inWhitelist) {
+            target = wlEditable
+          } else if (isImage && this._desiredImageEditable !== null) {
+            target = this._desiredImageEditable
+          } else {
+            target = allEditable
+          }
+          if (target !== null && element.control.editable !== target) {
+            element.control.editable = target
+            changed++
+          }
+        }
+      }
+    }
+    for (const list of lists) walk(list)
+    if (changed) this.forceUpdate()
+  }
+
   private _ensureAllEditableSticky(): void {
     if (this._allEditableStickyBound) return
     this._allEditableStickyBound = true
@@ -3112,10 +3167,55 @@ export class CommandAdapt {
         this._allEditableStickyBound = false
         return
       }
-      // 文档重载（setData）后控件对象被重建，editable 被重置，此处按 sticky 值重设
-      this._applyAllEditable(this._desiredAllEditable)
+      // 按“全部锁定 + 白名单解锁”的最终状态一次性设置，仅在值变化时改并 forceUpdate，
+      // 避免每次输入（contentChange）时反复翻转 editable 导致重渲染、光标丢失
+      this._applyEditableState()
     }
     this.draw.getEventBus().on('contentChange', handler)
+  }
+
+  /**
+   * 需求 11（补充）：一键设置【全部图片控件】（control.imageControl === true）是否可编辑。
+   * 通过 _desiredImageEditable 参与 sticky，重载/内容变化后依然保持，避免被“全部锁定”覆盖。
+   * @returns 命中的图片控件数量
+   */
+  public setAllImageControlsEditable(editable: boolean): number {
+    this._desiredImageEditable = editable
+    const count = this._applyImageEditable(editable)
+    this._ensureAllEditableSticky()
+    return count
+  }
+
+  // 遍历文档，对 imageControl === true 的控件设置 editable（仅在值变化时改并刷新）
+  private _applyImageEditable(editable: boolean): number {
+    const lists: IElement[][] = [
+      this.draw.getHeader().getElementList(),
+      this.draw.getOriginalMainElementList(),
+      this.draw.getFooter().getElementList()
+    ]
+    let count = 0
+    let changed = 0
+    const walk = (elementList: IElement[]) => {
+      for (const element of elementList) {
+        if (element.type === ElementType.TABLE && element.trList) {
+          for (const tr of element.trList) {
+            for (const td of tr.tdList) {
+              walk(td.value)
+            }
+          }
+        }
+        if (element.control && element.control.imageControl === true) {
+          count++
+          if (element.control.editable !== editable) {
+            element.control.editable = editable
+            changed++
+          }
+        }
+      }
+    }
+    for (const list of lists) walk(list)
+    if (changed) this.forceUpdate()
+    return count
   }
 
   /**
@@ -3126,14 +3226,23 @@ export class CommandAdapt {
     placeholders: string[],
     editable: boolean
   ): number {
+    // 记录白名单状态，供 sticky 在每次内容变化后重新应用（避免被全部锁定覆盖）
+    this._desiredEditableWhitelist = placeholders
+    this._desiredWhitelistEditable = editable
     const names = new Set(placeholders)
-    const apply = (): number => {
+    const apply = (): {
+      count: number
+      allPlaceholders: string[]
+      hits: string[]
+    } => {
       const lists: IElement[][] = [
         this.draw.getHeader().getElementList(),
         this.draw.getOriginalMainElementList(),
         this.draw.getFooter().getElementList()
       ]
       let count = 0
+      const allPlaceholders: string[] = []
+      const hits: string[] = []
       const walk = (elementList: IElement[]) => {
         for (const element of elementList) {
           if (element.type === ElementType.TABLE && element.trList) {
@@ -3143,22 +3252,27 @@ export class CommandAdapt {
               }
             }
           }
-          if (
-            element.control &&
-            element.control.placeholder &&
-            names.has(element.control.placeholder)
-          ) {
-            element.control.editable = editable
-            count++
+          if (element.control && element.control.placeholder) {
+            const ph = element.control.placeholder
+            if (!allPlaceholders.includes(ph)) allPlaceholders.push(ph)
+            if (names.has(ph)) {
+              element.control.editable = editable
+              count++
+              if (!hits.includes(ph)) hits.push(ph)
+            }
           }
         }
       }
       for (const list of lists) walk(list)
       if (count) this.forceUpdate()
+      return { count, allPlaceholders, hits }
+    }
+    const { count } = apply()
+    if (count) {
+      // 命中即确保 sticky handler 注册（含白名单重设逻辑）
+      this._ensureAllEditableSticky()
       return count
     }
-    const count = apply()
-    if (count) return count
     // 与 setAllControlsEditable 同理：文档未加载时延迟到 contentChange 后再试
     const eventBus = this.draw.getEventBus()
     let tries = 0
@@ -3167,11 +3281,22 @@ export class CommandAdapt {
         eventBus.off('contentChange', retry)
         return
       }
-      const c = apply()
-      if (c) eventBus.off('contentChange', retry)
+      const r = apply()
+      if (r.count) {
+        // 命中后确保 sticky handler 注册
+        this._ensureAllEditableSticky()
+        eventBus.off('contentChange', retry)
+      }
     }
     eventBus.on('contentChange', retry)
     return count
+  }
+
+  /**
+   * 暴露事件总线，供上层在控件渲染完成后监听 contentChange 等事件
+   */
+  public getEventBus(): EventBus<EventBusMap> {
+    return this.draw.getEventBus()
   }
 
   public locationControl(controlId: string, options?: ILocationControlOption) {
@@ -3314,7 +3439,8 @@ export class CommandAdapt {
       ...AREA_CONTEXT_ATTR
     ]
     cloneProperty<IElement>(cloneAttr, copyElement, cloneElement)
-    // 插入控件
+    // 插入控件（插入位置由 Draw.insertElementList 统一处理：光标落在换行符上
+    // 时插入到换行之前，避免控件落入独立空段落而前后出现空行）
     this.draw.insertElementList([cloneElement])
   }
 

@@ -258,7 +258,10 @@ export class Dialog {
     if (option.type === 'section') {
       // 容器型条目改为块级堆叠（标题/内容上下排布），
       // 避免继承 dialog-option__item 的 flex 横排导致内容溢出
-      itemContainer.classList.add('dialog-section', 'dialog-option__item--block')
+      itemContainer.classList.add(
+        'dialog-section',
+        'dialog-option__item--block'
+      )
       if (option.label) {
         const title = document.createElement('div')
         title.classList.add('dialog-section__title')
@@ -327,6 +330,7 @@ export class Dialog {
     if (option.type === 'countConfig') {
       // 容器型条目：标签与网格上下堆叠，网格内的弹性输入可随弹窗宽度收缩
       itemContainer.classList.add('dialog-option__item--block')
+      itemContainer.classList.add('dialog-option__item--count-config')
       const max = option.maxCount ?? 10
       if (option.label) {
         const label = document.createElement('div')
@@ -388,6 +392,81 @@ export class Dialog {
         grid.append(row)
       }
       itemContainer.append(grid)
+      return itemContainer
+    }
+
+    // ============ 默认图片配置（宽/高/四向内边距） ============
+    // 明细图片未传入宽/高/padding 时按此兜底；绑定到控件 imageDefaultConfig
+    if (option.type === 'defaultImageConfig') {
+      itemContainer.classList.add('dialog-option__item--block')
+      if (option.label) {
+        const label = document.createElement('div')
+        label.classList.add('dialog-option__label')
+        label.append(document.createTextNode(option.label))
+        itemContainer.append(label)
+      }
+      const init =
+        (option.initial as
+          | {
+              width?: number
+              height?: number
+              padding?: number[]
+            }
+          | undefined) ?? {}
+      const row = document.createElement('div')
+      row.classList.add('cc-row')
+      const p = init.padding
+      const p4 = !!p && p.length >= 4
+      const fields: { name: string; ph: string; type: string; val: string }[] =
+        [
+          {
+            name: 'dic_width',
+            ph: '宽',
+            type: 'number',
+            val: init.width != null ? String(init.width) : ''
+          },
+          {
+            name: 'dic_height',
+            ph: '高',
+            type: 'number',
+            val: init.height != null ? String(init.height) : ''
+          },
+          {
+            name: 'dic_padding_t',
+            ph: '上',
+            type: 'number',
+            val: p4 && p ? String(p[0]) : ''
+          },
+          {
+            name: 'dic_padding_r',
+            ph: '右',
+            type: 'number',
+            val: p ? String(p[1]) : ''
+          },
+          {
+            name: 'dic_padding_b',
+            ph: '下',
+            type: 'number',
+            val: p4 && p ? String(p[2]) : ''
+          },
+          {
+            name: 'dic_padding_l',
+            ph: '左',
+            type: 'number',
+            val: p ? String(p4 ? p[3] : p[0]) : ''
+          }
+        ]
+      for (const f of fields) {
+        const inp = this._mkInput({
+          type: f.type,
+          name: f.name,
+          placeholder: f.ph,
+          value: f.val
+        })
+        row.append(inp.el)
+        this.inputList.push(inp.input)
+      }
+      itemContainer.append(row)
       return itemContainer
     }
 

@@ -369,11 +369,50 @@ function computeImageSize(input: IImageSizeInput): {
  * - 图片模式：替换图片元素；当控件位于单元格且单元格仅含该控件时，
  *   按单元格尺寸自适应（优先按宽自适应），可通过 count 均分
  */
+/**
+ * 事件驱动等待：先尝试 apply；若控件尚未渲染（controlId 未分配）导致匹配失败，
+ * 则监听 contentChange 事件——setData 渲染完成（控件 id 分配）后会触发该事件，
+ * 届时再执行 apply。最多等待 timeout 毫秒（兜底），避免占位符错误时无限监听。
+ */
+function waitControlReady(
+  command: Command,
+  apply: () => boolean,
+  timeout = 1500
+): Promise<boolean> {
+  if (apply()) return Promise.resolve(true)
+  const eventBus = command.getEventBus?.()
+  if (!eventBus) {
+    return Promise.resolve(false)
+  }
+  return new Promise(resolve => {
+    let settled = false
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const cleanup = () => {
+      eventBus.off('contentChange', onReady)
+      if (timer) clearTimeout(timer)
+    }
+    const onReady = () => {
+      if (settled) return
+      if (apply()) {
+        settled = true
+        cleanup()
+        resolve(true)
+      }
+    }
+    eventBus.on('contentChange', onReady)
+    timer = setTimeout(() => {
+      if (settled) return
+      settled = true
+      cleanup()
+      resolve(false)
+    }, timeout)
+  })
+}
+
 export async function setControlValueByPlaceholder(
   command: Command,
   payload: IReplaceControlPayload
 ): Promise<void> {
-  console.log('command', payload)
   // valueType 缺省视为 VALUE；isImage 仅作兼容别名
   const valueType: IReplaceValueType =
     payload.valueType ?? (payload.isImage ? 'IMAGE' : 'VALUE')
@@ -460,11 +499,16 @@ export async function setControlValueByPlaceholder(
 
   // 3. 替换
   if (valueType !== 'IMAGE') {
-    // 文本分支无 await，直接取 id 即可
-    const targetIds = matchTargetIds()
-    for (const id of targetIds) {
-      command.executeSetControlValue({ id, value: textValue })
+    const applyText = (): boolean => {
+      const targetIds = matchTargetIds()
+      for (const id of targetIds) {
+        command.executeSetControlValue({ id, value: textValue })
+      }
+      return targetIds.length > 0
     }
+    // 控件 controlId 在 setData 渲染后才分配；若首次未匹配到（文档未渲染完），
+    // 监听 contentChange 事件——渲染完成后（控件 id 分配）自动重试，而非轮询
+    await waitControlReady(command, applyText)
     return
   }
 
@@ -476,10 +520,10 @@ export async function setControlValueByPlaceholder(
       return loadImageSize(item.value)
     })
   )
-  // 关键修复：await 之后重新按 placeholder 取最新控件 id。
-  // 之前的控件赋值可能触发异步 render 重建元素列表并重分配 controlId，
-  // 若提前（await 前）固化 id，会导致此处 setId 在 setValueListById 中匹配不到。
+  const applyImage = (): boolean => {
+  // await 之后（或重试时）重新按 placeholder 取最新控件 id
   const targetIds = matchTargetIds()
+  if (!targetIds.length) return false
   // 单元格内容可用宽需扣除左右内边距（默认 tdPadding=[0,5,5,5]）
   const tdPadding = command.getOptions().table.tdPadding
   const tdPaddingWidth = tdPadding[1] + tdPadding[3]
@@ -507,15 +551,17 @@ export async function setControlValueByPlaceholder(
         ? ctrl.imageCountConfigs.find(c => c.count === payload.count)
         : undefined
     const captionStyle = ctrl?.imageCaptionStyle
+    // 需求：默认图片配置——明细未传入宽/高/padding（四向）时的兜底
+    const defaultImage = ctrl?.imageDefaultConfig
     const elements: IElement[] = imageItems.map((item, i) => {
       const size = sizes[i] ?? { w: 0, h: 0 }
-      // 需求：尺寸/内边距优先级 = 明细显式 > 控件 count 预设 > 自适应。
-      // 若 set 显式给出属性，以其为主；否则回退到控件可视化配置中对应 count 的预设。
-      const setW = item.width ?? matchedCount?.width
-      const setH = item.height ?? matchedCount?.height
+      // 需求：尺寸/内边距优先级 = 明细显式 > 控件 count 预设 > 默认图片配置 > 自适应。
+      // 若 set 显式给出属性，以其为主；否则回退到控件可视化配置。
+      const setW = item.width ?? matchedCount?.width ?? defaultImage?.width
+      const setH = item.height ?? matchedCount?.height ?? defaultImage?.height
       const presetPadding = matchedCount?.padding
       // 需求 5.3：padding 支持二元组 [left, right] 与四元组 [top, right, bottom, left]
-      const p = item.padding ?? presetPadding ?? []
+      const p = item.padding ?? presetPadding ?? defaultImage?.padding ?? []
       let padLeft = 0
       let padRight = 0
       let padTop = 0
@@ -545,7 +591,7 @@ export async function setControlValueByPlaceholder(
       if (height) el.height = Math.round(height)
       // 需求 5.3：写入完整 IPadding 四元组 [top, right, bottom, left]，
       // 保留用户设置的上下内边距（不再硬性置 0）
-      if (item.padding ?? presetPadding) {
+      if (item.padding ?? presetPadding ?? defaultImage?.padding) {
         el.padding = [padTop, padRight, padBottom, padLeft]
       }
       // 需求 5.6：单元格内“宽度自适应”（未显式指定宽、也无 count 预设宽）的图片开启 isScaling，
@@ -598,6 +644,11 @@ export async function setControlValueByPlaceholder(
       }
     })
   }
+  return true
+  }
+  // 控件 controlId 在 setData 渲染后才分配；若首次未匹配到（文档未渲染完），
+  // 监听 contentChange 事件——渲染完成后（控件 id 分配）自动重试，而非轮询
+  await waitControlReady(command, applyImage)
 }
 
 /**
@@ -872,6 +923,17 @@ export function setControlsEditableByPlaceholders(
 ): number {
   // 直接遍历文档按占位符集合设置 editable，不依赖 controlId（模板加载初期尚未分配）。
   return command.setControlsEditableByPlaceholders(names, editable)
+}
+
+/**
+ * 需求 11（补充）：一键设置【全部图片控件】（control.imageControl === true）可编辑/不可编辑
+ * @returns 命中的图片控件数量
+ */
+export function setAllImageControlsEditable(
+  command: Command,
+  editable: boolean
+): number {
+  return command.setAllImageControlsEditable(editable)
 }
 
 /** 需求 12：图片控件删除/拖拽/缩放能力配置 */
