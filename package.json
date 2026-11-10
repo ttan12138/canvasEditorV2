@@ -69,7 +69,8 @@
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
     "postinstall": "simple-git-hooks",
-    "pre-release": "node scripts/pre-release.js"
+    "pre-release": "node scripts/pre-release.js",
+    "pre-commit": "npm run lint && npm run type:check"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -104,7 +105,7 @@
     "prismjs": "^1.27.0"
   },
   "simple-git-hooks": {
-    "pre-commit": "npm run lint && npm run type:check",
+    "pre-commit": "eslint . && tsc --noEmit && npm run type:check",
     "commit-msg": "node scripts/verifyCommit.js"
   }
 }
