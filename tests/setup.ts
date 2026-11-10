@@ -48,3 +48,9 @@ class StubWorker {
 afterEach(() => {
   vi.useRealTimers()
 })
+
+// Worker 文件（core/worker/works/*）顶层会赋值 onmessage、并在逻辑中调用 postMessage。
+// 单元测试直接 import 这些原始 .ts（不带 ?worker 包装），需先声明全局桩，
+// 否则严格模式下对未声明标识符赋值会抛 ReferenceError。
+;(globalThis as any).onmessage ??= () => {}
+;(globalThis as any).postMessage ??= () => {}

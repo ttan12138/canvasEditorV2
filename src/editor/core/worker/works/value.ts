@@ -7,9 +7,7 @@ interface IGetValueWorkerOption {
   options: IGetValueOption
 }
 
-onmessage = evt => {
-  const payload = <IGetValueWorkerOption>evt.data
-  const { options, data } = payload
+export function getValueData(data: Required<IEditorData>, options: IGetValueOption): IEditorData {
   const { extraPickAttrs = [] } = options || {}
 
   const editorData: IEditorData = {
@@ -28,5 +26,11 @@ onmessage = evt => {
     })
   }
 
-  postMessage(editorData)
+  return editorData
+}
+
+onmessage = evt => {
+  const payload = <IGetValueWorkerOption>evt.data
+  const { options, data } = payload
+  postMessage(getValueData(data, options))
 }

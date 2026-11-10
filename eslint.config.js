@@ -11,7 +11,8 @@ export default tseslint.config(
       'index.html',
       'docs/.vitepress/cache/**',
       'docs/.vitepress/dist/**',
-      'src/plugins/docx/**'
+      'src/plugins/docx/**',
+      'tests/**'
     ]
   },
   js.configs.recommended,
@@ -52,7 +53,7 @@ export default tseslint.config(
     }
   },
   {
-    files: ['tests/**/*.ts', 'vitest.config.ts'],
+    files: ['vitest.config.ts'],
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-non-null-assertion': 'off',

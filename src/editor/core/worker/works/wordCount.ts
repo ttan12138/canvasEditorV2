@@ -16,7 +16,7 @@ enum ControlComponent {
 const ZERO = '\u200B'
 const WRAP = '\n'
 
-function pickText(elementList: IElement[]): string {
+export function pickText(elementList: IElement[]): string {
   let text = ''
   let e = 0
   while (e < elementList.length) {
@@ -86,7 +86,7 @@ function pickText(elementList: IElement[]): string {
   return text
 }
 
-function groupText(text: string): string[] {
+export function groupText(text: string): string[] {
   const result: string[] = []
   let buffer = ''
 
@@ -164,8 +164,7 @@ function groupText(text: string): string[] {
   return result
 }
 
-onmessage = evt => {
-  const elementList = <IElement[]>evt.data
+export function countWords(elementList: IElement[]): number {
   // 提取文本
   const originText = pickText(elementList)
   // 过滤文本
@@ -174,5 +173,10 @@ onmessage = evt => {
     .replace(new RegExp(ZERO, 'g'), WRAP)
   // 文本分组
   const textGroup = groupText(filterText)
-  postMessage(textGroup.length)
+  return textGroup.length
+}
+
+onmessage = evt => {
+  const elementList = <IElement[]>evt.data
+  postMessage(countWords(elementList))
 }

@@ -4,7 +4,7 @@ enum ElementType {
   TABLE = 'table'
 }
 
-function getGroupIds(elementList: IElement[]): string[] {
+export function getGroupIds(elementList: IElement[]): string[] {
   const groupIds: string[] = []
   for (const element of elementList) {
     if (element.type === ElementType.TABLE) {

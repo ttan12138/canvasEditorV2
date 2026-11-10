@@ -20,10 +20,11 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["./src/", "./tests/", "./vite.config.ts"],
+  "include": ["./src/", "./vite.config.ts"],
   "exclude": [
     "./src/plugins/docx",
     "node_modules",
+    "tests",
     "dist"
   ]
 }

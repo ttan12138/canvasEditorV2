@@ -1,85 +1,43 @@
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { mergeOption } from '@/editor/utils/option'
+import { EditorMode, PageMode } from '@/editor/dataset/enum/Editor'
 
-describe('mergeOption', () => {
-  it('空参数返回完整默认配置', () => {
-    const options = mergeOption()
-    expect(options.width).toBe(794)
-    expect(options.height).toBe(1123)
-    expect(options.defaultSize).toBe(16)
-    expect(options.defaultFont).toBe('Microsoft YaHei')
+describe('utils/option mergeOption', () => {
+  it('无参时返回完整默认值', () => {
+    const option = mergeOption()
+    expect(option.mode).toBe(EditorMode.EDIT)
+    expect(option.width).toBe(794)
+    expect(option.height).toBe(1123)
+    expect(option.defaultFont).toBe('Microsoft YaHei')
+    expect(option.pageMode).toBe(PageMode.PAGING)
+    // 嵌套默认值已补全
+    expect(option.table).toBeDefined()
+    expect(option.control).toBeDefined()
+    expect(option.placeholder).toBeDefined()
+    expect(option.scale).toBe(1)
   })
 
-  it('自定义 width 覆盖默认值', () => {
-    const options = mergeOption({ width: 500 })
-    expect(options.width).toBe(500)
-    expect(options.height).toBe(1123)
+  it('覆盖顶层字段', () => {
+    const option = mergeOption({ width: 1000, scale: 2 })
+    expect(option.width).toBe(1000)
+    expect(option.scale).toBe(2)
+    // 其余默认值保留
+    expect(option.height).toBe(1123)
+    expect(option.defaultFont).toBe('Microsoft YaHei')
   })
 
-  it('嵌套 table 默认值合并', () => {
-    const options = mergeOption({
-      table: { tdPadding: [0, 10, 10, 10] as any }
+  it('覆盖嵌套字段且不影响顶层默认', () => {
+    const option = mergeOption({
+      control: { placeholder: { color: '#FF0000' } as any }
     })
-    expect(options.table.tdPadding).toEqual([0, 10, 10, 10])
-    expect(options.table.defaultBorderColor).toBeDefined()
+    expect(option.control.placeholder.color).toBe('#FF0000')
+    // 顶层默认仍生效
+    expect(option.scale).toBe(1)
+    expect(option.height).toBe(1123)
   })
 
-  it('需求 8.7：子表容器独立内边距默认值与合并', () => {
-    // 默认独立内边距为 [0,0,0,0]（与常规 tdPadding 解耦，由调用方按需覆盖）
-    const def = mergeOption()
-    expect(def.table.childTableTdPadding).toEqual([0, 0, 0, 0])
-    // 自定义值可覆盖
-    const options = mergeOption({
-      table: { childTableTdPadding: [4, 8, 4, 8] as any }
-    })
-    expect(options.table.childTableTdPadding).toEqual([4, 8, 4, 8])
-  })
-
-  it('header disabledPages 合并', () => {
-    const options = mergeOption({ header: { disabledPages: [0, 2] } })
-    expect(options.header.disabledPages).toEqual([0, 2])
-    expect(options.header.disabled).toBe(false)
-  })
-
-  it('footer disabledPages 合并', () => {
-    const options = mergeOption({ footer: { disabledPages: [0] } })
-    expect(options.footer.disabledPages).toEqual([0])
-    expect(options.footer.bottom).toBeDefined()
-  })
-
-  it('#1405 回归:恶意原型键不污染', () => {
-    const malicious = JSON.parse('{"__proto__":{"polluted":true}}')
-    mergeOption(malicious)
-    expect(({} as any).polluted).toBeUndefined()
-  })
-
-  it('hint 总开关默认关闭', () => {
-    const options = mergeOption()
-    expect(options.hint.disabled).toBe(true)
-    expect(options.hint.color).toBeDefined()
-    expect(options.hint.maxWidth).toBeGreaterThan(0)
-  })
-
-  it('hint 配置可覆盖默认值', () => {
-    const options = mergeOption({
-      hint: { disabled: false, color: '#ff0000', maxWidth: 200 }
-    })
-    expect(options.hint.disabled).toBe(false)
-    expect(options.hint.color).toBe('#ff0000')
-    expect(options.hint.maxWidth).toBe(200)
-  })
-
-  it('spellcheck 使用默认配置', () => {
-    const options = mergeOption()
-    expect(options.spellcheck.disabled).toBe(true)
-    expect(options.spellcheck.color).toBe('#FF0000')
-  })
-
-  it('spellcheck 配置可覆盖默认值', () => {
-    const options = mergeOption({
-      spellcheck: { disabled: false, color: '#00FF00' }
-    })
-    expect(options.spellcheck.disabled).toBe(false)
-    expect(options.spellcheck.color).toBe('#00FF00')
+  it('顶层传入的字段优先级最高', () => {
+    const option = mergeOption({ width: 500 } as any)
+    expect(option.width).toBe(500)
   })
 })

@@ -66,7 +66,7 @@ function isTextLikeElement(element: IElement): boolean {
   return !element.type || TEXTLIKE_ELEMENT_TYPE.includes(element.type)
 }
 
-function getCatalog(payload: IGetCatalogPayload): ICatalog | null {
+export function getCatalog(payload: IGetCatalogPayload): ICatalog | null {
   const { elementList, positionList } = payload
   // 筛选标题
   const titleElementList: ICatalogElement[] = []

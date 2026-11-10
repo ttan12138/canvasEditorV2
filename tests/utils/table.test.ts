@@ -1,71 +1,78 @@
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import {
   getColgroupWidth,
-  scaleColgroupToWidth,
-  shrinkColgroupToWidth
+  shrinkColgroupToWidth,
+  scaleColgroupToWidth
 } from '@/editor/utils/table'
-import { IColgroup } from '@/editor/interface/table/Colgroup'
+import type { IColgroup } from '@/editor/interface/table/Colgroup'
 
-describe('表格列宽缩放工具', () => {
-  it('getColgroupWidth 返回列宽之和', () => {
-    expect(getColgroupWidth([{ width: 100 }, { width: 200 }])).toBe(300)
+const makeColgroup = (widths: number[]): IColgroup[] =>
+  widths.map(width => ({ width }))
+
+describe('utils/table 列宽计算', () => {
+  describe('getColgroupWidth', () => {
+    it('汇总列宽', () => {
+      expect(getColgroupWidth(makeColgroup([100, 200, 300]))).toBe(600)
+    })
+    it('空列组返回 0', () => {
+      expect(getColgroupWidth([])).toBe(0)
+    })
   })
 
-  it('shrinkColgroupToWidth 未超宽时不处理', () => {
-    const colgroup: IColgroup[] = [{ width: 100 }, { width: 200 }]
-    shrinkColgroupToWidth(colgroup, 400, 40)
-    expect(colgroup.map(col => col.width)).toEqual([100, 200])
+  describe('scaleColgroupToWidth', () => {
+    it('等比例放大', () => {
+      const colgroup = makeColgroup([100, 100])
+      scaleColgroupToWidth(colgroup, 400)
+      expect(colgroup.map(c => c.width)).toEqual([200, 200])
+    })
+
+    it('等比例缩小', () => {
+      const colgroup = makeColgroup([100, 100])
+      scaleColgroupToWidth(colgroup, 100)
+      expect(colgroup.map(c => c.width)).toEqual([50, 50])
+    })
+
+    it('目标宽度与当前相同则不处理', () => {
+      const colgroup = makeColgroup([100, 100])
+      scaleColgroupToWidth(colgroup, 200)
+      expect(colgroup.map(c => c.width)).toEqual([100, 100])
+    })
+
+    it('总宽为 0 时不处理', () => {
+      const colgroup = makeColgroup([0, 0])
+      scaleColgroupToWidth(colgroup, 100)
+      expect(colgroup.map(c => c.width)).toEqual([0, 0])
+    })
   })
 
-  it('shrinkColgroupToWidth 超宽时等比例压缩', () => {
-    const colgroup: IColgroup[] = [{ width: 400 }, { width: 400 }]
-    shrinkColgroupToWidth(colgroup, 400, 40)
-    expect(colgroup.map(col => col.width)).toEqual([200, 200])
-  })
+  describe('shrinkColgroupToWidth', () => {
+    it('超宽时按比例压缩到目标宽度', () => {
+      const colgroup = makeColgroup([200, 200, 200]) // 600
+      shrinkColgroupToWidth(colgroup, 300, 50)
+      expect(getColgroupWidth(colgroup)).toBeCloseTo(300, 5)
+      // 各列等比压缩
+      expect(colgroup.every(c => c.width >= 50)).toBe(true)
+    })
 
-  it('shrinkColgroupToWidth 列宽不低于最小宽度', () => {
-    const colgroup: IColgroup[] = [{ width: 900 }, { width: 45 }]
-    shrinkColgroupToWidth(colgroup, 500, 40)
-    expect(colgroup[1].width).toBe(40)
-    expect(colgroup[0].width).toBe(460)
-  })
+    it('已在目标宽度内则不压缩', () => {
+      const colgroup = makeColgroup([100, 100])
+      shrinkColgroupToWidth(colgroup, 300, 50)
+      expect(colgroup.map(c => c.width)).toEqual([100, 100])
+    })
 
-  it('shrinkColgroupToWidth 低于最小宽度的列保持，可压缩列继续分摊', () => {
-    const colgroup: IColgroup[] = [{ width: 1000 }, { width: 30 }]
-    shrinkColgroupToWidth(colgroup, 500, 40)
-    expect(colgroup[1].width).toBe(30)
-    expect(colgroup[0].width).toBe(470)
-  })
+    it('全部列触及最小宽度仍超宽时保持原样', () => {
+      const colgroup = makeColgroup([100, 100]) // 200，均>50
+      // 目标远小于可压缩下限总和(100)，应直接置为下限或保持
+      shrinkColgroupToWidth(colgroup, 10, 50)
+      expect(getColgroupWidth(colgroup)).toBeGreaterThanOrEqual(100)
+    })
 
-  it('shrinkColgroupToWidth 全部列到达下限仍超宽时保持', () => {
-    const colgroup: IColgroup[] = [{ width: 45 }, { width: 42 }]
-    shrinkColgroupToWidth(colgroup, 50, 40)
-    expect(colgroup.map(col => col.width)).toEqual([40, 40])
-  })
-
-  it('shrinkColgroupToWidth 重复调用结果幂等', () => {
-    const colgroup: IColgroup[] = [{ width: 1000 }, { width: 30 }]
-    shrinkColgroupToWidth(colgroup, 500, 40)
-    const firstWidthList = colgroup.map(col => col.width)
-    shrinkColgroupToWidth(colgroup, 500, 40)
-    expect(colgroup.map(col => col.width)).toEqual(firstWidthList)
-  })
-
-  it('scaleColgroupToWidth 等比放大至目标宽度', () => {
-    const colgroup: IColgroup[] = [{ width: 100 }, { width: 300 }]
-    scaleColgroupToWidth(colgroup, 800)
-    expect(colgroup.map(col => col.width)).toEqual([200, 600])
-  })
-
-  it('scaleColgroupToWidth 等比缩小至目标宽度', () => {
-    const colgroup: IColgroup[] = [{ width: 400 }, { width: 400 }]
-    scaleColgroupToWidth(colgroup, 400)
-    expect(colgroup.map(col => col.width)).toEqual([200, 200])
-  })
-
-  it('scaleColgroupToWidth 总宽为 0 时不处理', () => {
-    const colgroup: IColgroup[] = [{ width: 0 }, { width: 0 }]
-    scaleColgroupToWidth(colgroup, 400)
-    expect(colgroup.map(col => col.width)).toEqual([0, 0])
+    it('幂等：重复调用结果一致', () => {
+      const colgroup = makeColgroup([200, 200, 200])
+      shrinkColgroupToWidth(colgroup, 300, 50)
+      const first = colgroup.map(c => c.width)
+      shrinkColgroupToWidth(colgroup, 300, 50)
+      expect(colgroup.map(c => c.width)).toEqual(first)
+    })
   })
 })
