@@ -1,4 +1,4 @@
-.dialog-mask {
+.ccc-dialog-mask {
   position: fixed;
   left: 0;
   top: 0;
@@ -9,7 +9,7 @@
   z-index: 99;
 }
 
-.dialog-container {
+.ccc-dialog-container {
   position: fixed;
   top: 0;
   right: 0;
@@ -23,7 +23,7 @@
   align-items: center;
 }
 
-.dialog {
+.ccc-dialog {
   position: absolute;
   padding: 0 30px 30px;
   background: #ffffff;
@@ -32,7 +32,7 @@
   border-radius: 2px;
 }
 
-.dialog-title {
+.ccc-dialog-title {
   position: relative;
   border-bottom: 1px solid #e2e6ed;
   margin-bottom: 30px;
@@ -42,7 +42,7 @@
   justify-content: space-between;
 }
 
-.dialog-title i {
+.ccc-dialog-title i {
   width: 16px;
   height: 16px;
   cursor: pointer;
@@ -50,23 +50,23 @@
   background: url(../../assets/images/close.svg);
 }
 
-.dialog-option__item {
+.ccc-dialog-option__item {
   margin-bottom: 18px;
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
-.dialog-option__item span {
+.ccc-dialog-option__item span {
   margin-right: 12px;
   font-size: 14px;
   color: #3d4757;
   position: relative;
 }
 
-.dialog-option__item input,
-.dialog-option__item textarea,
-.dialog-option__item select {
+.ccc-dialog-option__item input,
+.ccc-dialog-option__item textarea,
+.ccc-dialog-option__item select {
   width: 276px;
   height: 30px;
   border-radius: 2px;
@@ -82,33 +82,33 @@
 
 /* 容器型条目（section/countConfig/captionStyle/hgroup 外的标签+内容堆叠）：
    覆盖 dialog-option__item 的 flex 横排，防止固定宽度弹窗下内容溢出 */
-.dialog-option__item--block {
+.ccc-dialog-option__item--block {
   display: block;
 }
-.dialog-option__item--count-config {
+.ccc-dialog-option__item--count-config {
   border: 1px dashed #d3d3d3;
 }
-.dialog-option__item--count-config .dialog-option__label {
+.ccc-dialog-option__item--count-config .ccc-dialog-option__label {
   position: absolute;
   width: 10px;
   padding-top: 10px;
 }
 
 /* 弹窗主字段输入弹性收缩（配合容器定宽）：仅直接子项，不影响分组内部 */
-.dialog-option > .dialog-option__item input,
-.dialog-option > .dialog-option__item textarea,
-.dialog-option > .dialog-option__item select {
+.ccc-dialog-option > .ccc-dialog-option__item input,
+.ccc-dialog-option > .ccc-dialog-option__item textarea,
+.ccc-dialog-option > .ccc-dialog-option__item select {
   width: auto;
   flex: 1;
   min-width: 0;
 }
 
-.dialog-option__item input:focus,
-.dialog-option__item textarea:focus {
+.ccc-dialog-option__item input:focus,
+.ccc-dialog-option__item textarea:focus {
   border-color: #4991f2;
 }
 
-.dialog-option__item--require::before {
+.ccc-dialog-option__item--require::before {
   content: '*';
   color: #f56c6c;
   margin-right: 4px;
@@ -116,13 +116,13 @@
   left: -8px;
 }
 
-.dialog-menu {
+.ccc-dialog-menu {
   display: flex;
   align-items: center;
   justify-content: flex-end;
 }
 
-.dialog-menu button {
+.ccc-dialog-menu button {
   position: relative;
   display: inline-block;
   border: 1px solid #e2e6ed;
@@ -134,27 +134,27 @@
   cursor: pointer;
 }
 
-.dialog-menu button:hover {
+.ccc-dialog-menu button:hover {
   background: rgba(25, 55, 88, 0.04);
 }
 
-.dialog-menu__cancel {
+.ccc-dialog-menu__cancel {
   margin-right: 16px;
 }
 
-.dialog-menu button[type='submit'] {
+.ccc-dialog-menu button[type='submit'] {
   color: #ffffff;
   background: #4991f2;
   border-color: #4991f2;
 }
 
-.dialog-menu button[type='submit']:hover {
+.ccc-dialog-menu button[type='submit']:hover {
   background: #5b9cf3;
   border-color: #5b9cf3;
 }
 
 /* 开关（toggle）：底层 checkbox 隐藏，用 track 呈现滑动开关 */
-.dialog-switch {
+.ccc-dialog-switch {
   position: relative;
   display: inline-block;
   width: 44px;
@@ -163,7 +163,7 @@
   user-select: none;
 }
 
-.dialog-option__item .dialog-switch__input {
+.ccc-dialog-option__item .ccc-dialog-switch__input {
   position: absolute;
   width: 0;
   height: 0;
@@ -173,7 +173,7 @@
   padding: 0;
 }
 
-.dialog-switch__track {
+.ccc-dialog-switch__track {
   position: absolute;
   left: 0;
   top: 0;
@@ -184,7 +184,7 @@
   transition: background 0.2s;
 }
 
-.dialog-switch__track::after {
+.ccc-dialog-switch__track::after {
   content: '';
   position: absolute;
   left: 2px;
@@ -196,16 +196,16 @@
   transition: transform 0.2s;
 }
 
-.dialog-switch__input:checked + .dialog-switch__track {
+.ccc-dialog-switch__input:checked + .ccc-dialog-switch__track {
   background: #4991f2;
 }
 
-.dialog-switch__input:checked + .dialog-switch__track::after {
+.ccc-dialog-switch__input:checked + .ccc-dialog-switch__track::after {
   transform: translateX(22px);
 }
 
 /* 分组（带条件显示）：用于“是否为图像控件”嵌套 */
-.dialog-section {
+.ccc-dialog-section {
   width: 100%;
   margin-bottom: 14px;
   padding: 10px 12px;
@@ -214,24 +214,24 @@
   background: #fafbfc;
 }
 
-.dialog-section__title {
+.ccc-dialog-section__title {
   font-size: 14px;
   font-weight: 600;
   color: #3d4757;
   margin-bottom: 10px;
 }
 
-.dialog-section__body .dialog-option__item {
+.ccc-dialog-section__body .ccc-dialog-option__item {
   padding-left: 4px;
   margin-bottom: 10px;
 }
 
-.dialog-section__body .dialog-option__item:last-child {
+.ccc-dialog-section__body .ccc-dialog-option__item:last-child {
   margin-bottom: 0;
 }
 
 /* 分组内连续开关：双列网格，紧凑排列 */
-.dialog-switch-grid {
+.ccc-dialog-switch-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   column-gap: 16px;
@@ -239,26 +239,26 @@
   margin-bottom: 10px;
 }
 
-.dialog-switch-grid .dialog-option__item {
+.ccc-dialog-switch-grid .ccc-dialog-option__item {
   margin-bottom: 0;
   padding-left: 0;
 }
 
 /* 水平分组：子项左右排布（如 开关组 + count 预设） */
-.dialog-hgroup {
+.ccc-dialog-hgroup {
   display: flex;
   align-items: flex-start;
   gap: 16px;
   width: 100%;
 }
 
-.dialog-hgroup__cell {
+.ccc-dialog-hgroup__cell {
   flex: 1;
   min-width: 0;
 }
 
 /* 左右布局下的开关单元：单列，固定占整宽 30%（剩余给 count 预设列） */
-.dialog-hgroup__cell.dialog-switch-grid {
+.ccc-dialog-hgroup__cell.ccc-dialog-switch-grid {
   flex: 0 0 30%;
   max-width: 30%;
   grid-template-columns: 1fr;
@@ -266,7 +266,7 @@
   margin-bottom: 0;
 }
 
-.dialog-option__label {
+.ccc-dialog-option__label {
   width: 100%;
   font-size: 13px;
   font-weight: 600;
@@ -275,7 +275,7 @@
 }
 
 /* 按 count 的图片预设：限高 4 行（4×28px + 3×6px），超出滚动 */
-.cc-grid {
+.ccc-dialog-cc-grid {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -284,13 +284,13 @@
   padding-right: 4px;
 }
 
-.cc-row {
+.ccc-dialog-cc-row {
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
-.cc-row__label {
+.ccc-dialog-cc-row__label {
   margin-left: 20px;
   width: 8px;
   flex-shrink: 0;
@@ -299,7 +299,7 @@
 }
 
 /* 输入自适应宽度：适配左右布局下的窄列（右列 count 预设） */
-.cc-row input {
+.ccc-dialog-cc-row input {
   flex: 1;
   min-width: 0;
   width: auto !important;
@@ -311,11 +311,11 @@
   outline: none;
 }
 
-.cc-row input:focus {
+.ccc-dialog-cc-row input:focus {
   border-color: #4991f2;
 }
 
-.dialog-toggle {
+.ccc-dialog-toggle {
   margin: 8px 0 0;
   padding: 2px 12px;
   font-size: 12px;
@@ -327,7 +327,7 @@
 }
 
 /* 题注默认样式：单列平铺，限高 6 行（6×28px + 5×8px 行距），超出滚动 */
-.cap-grid {
+.ccc-dialog-cap-grid {
   display: grid;
   grid-template-columns: 1fr;
   gap: 8px;
@@ -336,20 +336,20 @@
   padding-right: 4px;
 }
 
-.cap-field {
+.ccc-dialog-cap-field {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.cap-field > span {
+.ccc-dialog-cap-field > span {
   width: 70px;
   font-size: 13px;
   color: #3d4757;
 }
 
-.cap-field input,
-.cap-field select {
+.ccc-dialog-cap-field input,
+.ccc-dialog-cap-field select {
   flex: 1;
   min-width: 0;
   height: 28px;
@@ -361,18 +361,18 @@
 }
 
 /* 阴影可视化：横偏/纵偏/模糊/颜色 四输入一行 */
-.cap-field--shadow {
+.ccc-dialog-cap-field--shadow {
   align-items: flex-start;
 }
 
-.cap-shadow {
+.ccc-dialog-cap-shadow {
   flex: 1;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
 
-.cap-shadow input {
+.ccc-dialog-cap-shadow input {
   width: 64px !important;
   min-width: 0;
   height: 28px;
@@ -383,6 +383,6 @@
   outline: none;
 }
 
-.cap-shadow input:focus {
+.ccc-dialog-cap-shadow input:focus {
   border-color: #4991f2;
 }

@@ -252,31 +252,31 @@ export class Dialog {
   /** 递归渲染单个配置项（含 section / countConfig / captionStyle 容器类型） */
   private _renderOption(option: IDialogData): HTMLElement {
     const itemContainer = document.createElement('div')
-    itemContainer.classList.add('dialog-option__item')
+    itemContainer.classList.add('ccc-dialog-option__item')
 
     // ============ 分组（带条件显示） ============
     if (option.type === 'section') {
       // 容器型条目改为块级堆叠（标题/内容上下排布），
       // 避免继承 dialog-option__item 的 flex 横排导致内容溢出
       itemContainer.classList.add(
-        'dialog-section',
-        'dialog-option__item--block'
+        'ccc-dialog-section',
+        'ccc-dialog-option__item--block'
       )
       if (option.label) {
         const title = document.createElement('div')
-        title.classList.add('dialog-section__title')
+        title.classList.add('ccc-dialog-section__title')
         title.append(document.createTextNode(option.label))
         itemContainer.append(title)
       }
       const body = document.createElement('div')
-      body.classList.add('dialog-section__body')
+      body.classList.add('ccc-dialog-section__body')
       // 紧凑布局：连续的 switch 子项合并进双列网格，避免每项独占一行
       let switchGrid: HTMLDivElement | null = null
       for (const child of option.children ?? []) {
         if (child.type === 'switch') {
           if (!switchGrid) {
             switchGrid = document.createElement('div')
-            switchGrid.classList.add('dialog-switch-grid')
+            switchGrid.classList.add('ccc-dialog-switch-grid')
             body.append(switchGrid)
           }
           switchGrid.append(this._renderOption(child))
@@ -300,15 +300,15 @@ export class Dialog {
     // ============ 水平分组：子项左右排布（如 开关组 + count 预设） ============
     // 连续 switch 子项合并为一个双列网格单元，其余子项各占一格
     if (option.type === 'hgroup') {
-      itemContainer.classList.add('dialog-hgroup')
+      itemContainer.classList.add('ccc-dialog-hgroup')
       let switchCell: HTMLDivElement | null = null
       for (const child of option.children ?? []) {
         if (child.type === 'switch') {
           if (!switchCell) {
             switchCell = document.createElement('div')
             switchCell.classList.add(
-              'dialog-hgroup__cell',
-              'dialog-switch-grid'
+              'ccc-dialog-hgroup__cell',
+              'ccc-dialog-switch-grid'
             )
             itemContainer.append(switchCell)
           }
@@ -317,7 +317,7 @@ export class Dialog {
         }
         switchCell = null
         const cell = document.createElement('div')
-        cell.classList.add('dialog-hgroup__cell')
+        cell.classList.add('ccc-dialog-hgroup__cell')
         cell.append(this._renderOption(child))
         itemContainer.append(cell)
       }
@@ -325,29 +325,29 @@ export class Dialog {
     }
 
     // ============ 按 count 的图片尺寸/内边距预设 ============
-    // 全量渲染（1..maxCount），区域限高约 4 行、超出滚动（CSS .cc-grid），
+    // 全量渲染（1..maxCount），区域限高约 4 行、超出滚动（CSS .ccc-dialog-cc-grid），
     // 不再使用“展开更多”折叠按钮
     if (option.type === 'countConfig') {
       // 容器型条目：标签与网格上下堆叠，网格内的弹性输入可随弹窗宽度收缩
-      itemContainer.classList.add('dialog-option__item--block')
-      itemContainer.classList.add('dialog-option__item--count-config')
+      itemContainer.classList.add('ccc-dialog-option__item--block')
+      itemContainer.classList.add('ccc-dialog-option__item--count-config')
       const max = option.maxCount ?? 10
       if (option.label) {
         const label = document.createElement('div')
-        label.classList.add('dialog-option__label')
+        label.classList.add('ccc-dialog-option__label')
         label.append(document.createTextNode(option.label))
         itemContainer.append(label)
       }
       const grid = document.createElement('div')
-      grid.classList.add('cc-grid')
+      grid.classList.add('ccc-dialog-cc-grid')
       const initialConfigs =
         (option.initial as IImageCountConfig[] | undefined) ?? []
       for (let c = 1; c <= max; c++) {
         const cfg = initialConfigs.find(x => x.count === c)
         const row = document.createElement('div')
-        row.classList.add('cc-row')
+        row.classList.add('ccc-dialog-cc-row')
         const cl = document.createElement('span')
-        cl.classList.add('cc-row__label')
+        cl.classList.add('ccc-dialog-cc-row__label')
         cl.append(document.createTextNode(`${c}`))
         row.append(cl)
         // 需求：padding 改为 上/右/下/左 四个输入框；回填兼容二元组 [左,右]
@@ -398,10 +398,10 @@ export class Dialog {
     // ============ 默认图片配置（宽/高/四向内边距） ============
     // 明细图片未传入宽/高/padding 时按此兜底；绑定到控件 imageDefaultConfig
     if (option.type === 'defaultImageConfig') {
-      itemContainer.classList.add('dialog-option__item--block')
+      itemContainer.classList.add('ccc-dialog-option__item--block')
       if (option.label) {
         const label = document.createElement('div')
-        label.classList.add('dialog-option__label')
+        label.classList.add('ccc-dialog-option__label')
         label.append(document.createTextNode(option.label))
         itemContainer.append(label)
       }
@@ -414,7 +414,7 @@ export class Dialog {
             }
           | undefined) ?? {}
       const row = document.createElement('div')
-      row.classList.add('cc-row')
+      row.classList.add('ccc-dialog-cc-row')
       const p = init.padding
       const p4 = !!p && p.length >= 4
       const fields: { name: string; ph: string; type: string; val: string }[] =
@@ -473,15 +473,15 @@ export class Dialog {
     // ============ 题注默认样式（value 以外的可视化配置） ============
     if (option.type === 'captionStyle') {
       // 容器型条目：标签与网格上下堆叠，网格内的弹性输入可随弹窗宽度收缩
-      itemContainer.classList.add('dialog-option__item--block')
+      itemContainer.classList.add('ccc-dialog-option__item--block')
       if (option.label) {
         const label = document.createElement('div')
-        label.classList.add('dialog-option__label')
+        label.classList.add('ccc-dialog-option__label')
         label.append(document.createTextNode(option.label))
         itemContainer.append(label)
       }
       const grid = document.createElement('div')
-      grid.classList.add('cap-grid')
+      grid.classList.add('ccc-dialog-cap-grid')
       const init = (option.initial as Partial<IImageCaption> | undefined) ?? {}
       for (const f of CAPTION_STYLE_FIELDS) {
         // 阴影：可视化拆成 横偏/纵偏/模糊/颜色，确认时合并为 CSS text-shadow
@@ -490,12 +490,12 @@ export class Dialog {
             typeof init.textShadow === 'string' ? init.textShadow : ''
           )
           const row = document.createElement('div')
-          row.classList.add('cap-field', 'cap-field--shadow')
+          row.classList.add('ccc-dialog-cap-field', 'ccc-dialog-cap-field--shadow')
           const lab = document.createElement('span')
           lab.append(document.createTextNode(f.label))
           row.append(lab)
           const wrap = document.createElement('div')
-          wrap.classList.add('cap-shadow')
+          wrap.classList.add('ccc-dialog-cap-shadow')
           const parts = [
             { suf: 'x', ph: '横偏', type: 'number', val: shadowInit.x },
             { suf: 'y', ph: '纵偏', type: 'number', val: shadowInit.y },
@@ -523,7 +523,7 @@ export class Dialog {
           continue
         }
         const row = document.createElement('div')
-        row.classList.add('cap-field')
+        row.classList.add('ccc-dialog-cap-field')
         const lab = document.createElement('span')
         lab.append(document.createTextNode(f.label))
         row.append(lab)
@@ -550,7 +550,7 @@ export class Dialog {
       optionName.append(document.createTextNode(option.label))
       itemContainer.append(optionName)
       if (option.required) {
-        optionName.classList.add('dialog-option__item--require')
+        optionName.classList.add('ccc-dialog-option__item--require')
       }
     }
     const { el, input } = this._mkInput(option)
@@ -563,16 +563,16 @@ export class Dialog {
     const { title, data, onClose, onCancel, onConfirm, width } = this.options
     // 渲染遮罩层
     const mask = document.createElement('div')
-    mask.classList.add('dialog-mask')
+    mask.classList.add('ccc-dialog-mask')
     mask.setAttribute(EDITOR_COMPONENT, EditorComponent.COMPONENT)
     document.body.append(mask)
     // 渲染容器
     const container = document.createElement('div')
-    container.classList.add('dialog-container')
+    container.classList.add('ccc-dialog-container')
     container.setAttribute(EDITOR_COMPONENT, EditorComponent.COMPONENT)
     // 弹窗
     const dialogContainer = document.createElement('div')
-    dialogContainer.classList.add('dialog')
+    dialogContainer.classList.add('ccc-dialog')
     // 需求：支持固定宽度，避免多列布局（如左右分组）把弹窗撑得过宽；
     // 设宽后内部弹性输入（flex:1 + min-width:0）自适应收缩
     if (width) {
@@ -583,7 +583,7 @@ export class Dialog {
     container.append(dialogContainer)
     // 标题容器
     const titleContainer = document.createElement('div')
-    titleContainer.classList.add('dialog-title')
+    titleContainer.classList.add('ccc-dialog-title')
     // 标题&关闭按钮
     const titleSpan = document.createElement('span')
     titleSpan.append(document.createTextNode(title))
@@ -599,7 +599,7 @@ export class Dialog {
     dialogContainer.append(titleContainer)
     // 选项容器
     const optionContainer = document.createElement('div')
-    optionContainer.classList.add('dialog-option')
+    optionContainer.classList.add('ccc-dialog-option')
     // 选项
     for (let i = 0; i < data.length; i++) {
       optionContainer.append(this._renderOption(data[i]))
@@ -621,10 +621,10 @@ export class Dialog {
 
     // 按钮容器
     const menuContainer = document.createElement('div')
-    menuContainer.classList.add('dialog-menu')
+    menuContainer.classList.add('ccc-dialog-menu')
     // 取消按钮
     const cancelBtn = document.createElement('button')
-    cancelBtn.classList.add('dialog-menu__cancel')
+    cancelBtn.classList.add('ccc-dialog-menu__cancel')
     cancelBtn.append(document.createTextNode('取消'))
     cancelBtn.type = 'button'
     cancelBtn.onclick = () => {
