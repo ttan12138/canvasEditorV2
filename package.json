@@ -58,7 +58,7 @@
     "lib:vue": "eslint . && tsc --noEmit && vite build --mode vue && node scripts/clean-vue-dist.mjs",
     "build": "eslint . && tsc && vitest run && vite build --mode app",
     "serve": "vite preview",
-    "lint": "eslint . && tsc --noEmit && vitest run",
+    "lint": "eslint . && tsc --noEmit",
     "cypress:open": "cypress open",
     "cypress:run": "cypress run",
     "test:unit": "vitest run",
@@ -105,7 +105,7 @@
     "prismjs": "^1.27.0"
   },
   "simple-git-hooks": {
-    "pre-commit": "eslint . && tsc --noEmit && npm run type:check",
+    "pre-commit": "npm run lint && npm run type:check",
     "commit-msg": "node scripts/verifyCommit.js"
   }
 }
